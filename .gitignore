@@ -14,6 +14,7 @@ backend/data/*.xlsx
 backend/data/audit_log.jsonl
 backend/data/backups/
 backend/data/runtime_documents.json
+backend/data/seed_documents.json
 backend/data/uploads/
 agent/.env
 agent/.venv/
