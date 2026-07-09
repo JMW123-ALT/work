@@ -1,0 +1,13 @@
+chromadb
+httpx
+langgraph
+openai
+pydantic
+uvicorn
+
+# Optional, for API service:
+fastapi
+
+# Optional, for later real provider/tool integrations:
+tavily-python
+python-docx

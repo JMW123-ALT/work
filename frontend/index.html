@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>文旅向量数据库与 Web 系统</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">旅</span>
+        <div>
+          <strong>文旅知识中台</strong>
+          <small>Vector + RAG MVP</small>
+        </div>
+      </div>
+      <nav>
+        <button class="nav-item active" data-view="ask">AI 问答</button>
+        <button class="nav-item" data-view="search">向量检索</button>
+        <button class="nav-item" data-view="ingest" id="ingestNav">资料入库</button>
+        <button class="nav-item" data-view="docs">资料库</button>
+        <button class="nav-item" data-view="audit">审计记录</button>
+      </nav>
+      <div class="api-state">
+        <span></span>
+        SQLite chunks + API 占位
+      </div>
+    </aside>
+
+    <main class="app">
+      <header class="topbar">
+        <div>
+          <h1>文旅向量数据库与 Web 系统</h1>
+          <p>文档、PDF、图片可入库；解析、切分、embedding API 后续填入。</p>
+        </div>
+        <div class="topbar-controls">
+          <label>
+            访问身份
+            <select id="userType">
+              <option value="visitor">游客</option>
+              <option value="free">免费用户</option>
+              <option value="paid">付费用户</option>
+              <option value="internal">内部用户</option>
+              <option value="admin">管理员</option>
+            </select>
+          </label>
+          <label>
+            入库身份
+            <select id="ingestRole">
+              <option value="none">无上传权限</option>
+              <option value="contributor">资料维护员</option>
+              <option value="internal_uploader">内部入库员</option>
+              <option value="admin">管理员</option>
+            </select>
+          </label>
+        </div>
+      </header>
+
+      <section class="view active" id="view-ask">
+        <div class="panel">
+          <h2>AI 检索问答</h2>
+          <div class="input-row">
+            <input id="questionInput" value="如何提升文旅项目二次消费？" />
+            <button id="askBtn">提问</button>
+          </div>
+          <div id="answerBox" class="answer empty">等待提问</div>
+          <div id="sourceList" class="result-list"></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-search">
+        <div class="panel">
+          <h2>向量检索</h2>
+          <div class="input-row">
+            <input id="searchInput" value="客群画像 指标" />
+            <button id="searchBtn">检索</button>
+          </div>
+          <div id="searchList" class="result-list"></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-ingest">
+        <div class="panel">
+          <h2>资料入库</h2>
+          <div class="form-grid">
+            <label>标题<input id="docTitle" value="新增文旅资料样例" /></label>
+            <label>对象类型
+              <select id="docType">
+                <option value="internal_doc">内部文档</option>
+                <option value="public_doc">外部发布版</option>
+                <option value="case_summary">案例摘要</option>
+                <option value="metric_doc">指标口径</option>
+              </select>
+            </label>
+            <label>资料权限
+              <select id="docPermission">
+                <option value="public">public</option>
+                <option value="free">free</option>
+                <option value="paid">paid</option>
+                <option value="internal">internal</option>
+                <option value="restricted">restricted</option>
+              </select>
+            </label>
+            <label>模态
+              <select id="docModality">
+                <option value="auto">自动识别</option>
+                <option value="text">文本</option>
+                <option value="pdf">PDF</option>
+                <option value="image">图片</option>
+                <option value="office">Office</option>
+              </select>
+            </label>
+            <label class="wide">上传文件
+              <input id="docFile" type="file" multiple accept=".pdf,.txt,.md,.csv,.json,.doc,.docx,.ppt,.pptx,.xls,.xlsx,image/*" />
+            </label>
+            <label class="wide">内容/说明
+              <textarea id="docContent">这里可以填写资料摘要、图片说明或 PDF 备注；后续解析 API 接入后会替换为自动提取内容。</textarea>
+            </label>
+          </div>
+          <button id="ingestBtn">登记并入库</button>
+          <p id="ingestMessage" class="message"></p>
+        </div>
+      </section>
+
+      <section class="view" id="view-docs">
+        <div class="panel">
+          <h2>资料库</h2>
+          <div id="docList" class="table-list"></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-audit">
+        <div class="panel">
+          <h2>审计记录</h2>
+          <div id="auditList" class="table-list"></div>
+        </div>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>

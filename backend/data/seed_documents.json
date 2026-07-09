@@ -1,0 +1,22 @@
+[
+  {
+    "source_id": "demo-public-001",
+    "title": "公开文旅项目建设流程",
+    "content": "文旅项目通常包括资源梳理、市场定位、产品策划、投资测算、建设实施和运营评估等阶段。公开资料适合用于游客和普通客户查询。",
+    "object_type": "public_doc",
+    "permission_level": "public",
+    "access_channel": "web",
+    "original_ref_uri": "seed://public-project-process",
+    "section_path": "公开资料/项目流程"
+  },
+  {
+    "source_id": "demo-paid-001",
+    "title": "标杆景区二消提升案例摘要",
+    "content": "某标杆景区通过夜游产品、主题餐饮、亲子研学和会员权益组合提升二次消费。付费用户可查看案例方法摘要与指标变化区间。",
+    "object_type": "case_summary",
+    "permission_level": "paid",
+    "access_channel": "web",
+    "original_ref_uri": "seed://benchmark-secondary-consumption",
+    "section_path": "案例库/二消提升"
+  }
+]
