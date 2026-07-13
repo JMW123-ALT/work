@@ -18,6 +18,7 @@ backend/data/backups/
 backend/data/runtime_documents.json
 backend/data/seed_documents.json
 backend/data/uploads/
+backend/data/assets/
 agent/.env
 agent/.venv/
 agent/.chroma/

@@ -21,9 +21,12 @@ Embedding 客户端
   {"type": "sparse", "data": {token: weight}}   本地占位
   {"type": "dense",  "data": [float, ...]}       DashScope 真实向量
 """
+import base64
 import json
+import mimetypes
 import re
 from collections import Counter
+from pathlib import Path
 
 from app.core.config import settings
 
@@ -38,13 +41,39 @@ def _is_multimodal_model(model: str) -> bool:
     return "vl" in m or "multimodal" in m
 
 
-def multimodal_embedding_url(base_url: str) -> str:
+def multimodal_embedding_url(base_url: str, native_base_url: str = "") -> str:
     """根据配置生成 qwen3-vl-embedding 原生多模态 endpoint。"""
 
-    clean_base = (base_url or "https://dashscope.aliyuncs.com/api/v1").rstrip("/")
+    selected_base = base_url
+    if native_base_url and "/compatible-mode/" in (base_url or ""):
+        selected_base = native_base_url
+    clean_base = (selected_base or "https://dashscope.aliyuncs.com/api/v1").rstrip("/")
     if clean_base.endswith(_MULTIMODAL_PATH):
         return clean_base
     return f"{clean_base}/{_MULTIMODAL_PATH}"
+
+
+def multimodal_content_items(
+    text: str,
+    *,
+    image_path: str = "",
+    image_url: str = "",
+    mime_type: str = "",
+) -> list[dict]:
+    contents: list[dict] = []
+    clean_text = (text or "").strip()
+    if clean_text:
+        contents.append({"text": clean_text})
+
+    if image_url:
+        contents.append({"image": image_url})
+    elif image_path:
+        path = Path(image_path)
+        guessed_mime = mime_type or mimetypes.guess_type(path.name)[0] or "image/png"
+        image_b64 = base64.b64encode(path.read_bytes()).decode("ascii")
+        contents.append({"image": f"data:{guessed_mime};base64,{image_b64}"})
+
+    return contents or [{"text": " "}]
 
 
 class EmbeddingClient:
@@ -66,6 +95,25 @@ class EmbeddingClient:
                 return self._embed_multimodal(text)
             return self._embed_compat(text)
         return self._embed_locally(text)
+
+    def embed_multimodal(
+        self,
+        text: str,
+        *,
+        image_path: str = "",
+        image_url: str = "",
+        mime_type: str = "",
+    ) -> dict:
+        if self.provider not in ("", "local") and settings.embedding_api_key:
+            if _is_multimodal_model(self.model):
+                return self._embed_multimodal(
+                    text,
+                    image_path=image_path,
+                    image_url=image_url,
+                    mime_type=mime_type,
+                )
+            return self._embed_compat(text)
+        return self._embed_locally(f"{text} {image_path or image_url}")
 
     # ── 本地占位 ──────────────────────────────────────────────────
 
@@ -89,7 +137,14 @@ class EmbeddingClient:
 
     # ── DashScope 原生多模态接口（qwen3-vl-embedding 等）─────────
 
-    def _embed_multimodal(self, text: str) -> dict:
+    def _embed_multimodal(
+        self,
+        text: str,
+        *,
+        image_path: str = "",
+        image_url: str = "",
+        mime_type: str = "",
+    ) -> dict:
         """调用 DashScope 原生多模态 embedding 接口。
 
         文档示例（多图+视频+文本融合向量）：
@@ -114,7 +169,12 @@ class EmbeddingClient:
             {
                 "model": self.model,
                 "input": {
-                    "contents": [{"text": (text or "").strip() or " "}]
+                    "contents": multimodal_content_items(
+                        text,
+                        image_path=image_path,
+                        image_url=image_url,
+                        mime_type=mime_type,
+                    )
                 },
                 "parameters": {"enable_fusion": True},
             },
@@ -122,7 +182,10 @@ class EmbeddingClient:
         ).encode("utf-8")
 
         req = urllib.request.Request(
-            multimodal_embedding_url(settings.embedding_base_url),
+            multimodal_embedding_url(
+                settings.embedding_base_url,
+                native_base_url=settings.embedding_dashscope_url,
+            ),
             data=payload,
             headers={
                 "Content-Type": "application/json",
@@ -141,7 +204,7 @@ class EmbeddingClient:
             logging.getLogger("app").warning(
                 "DashScope multimodal embedding failed, falling back to local: %s", exc
             )
-            return self._embed_locally(text)
+            return self._embed_locally(f"{text} {image_path or image_url}")
 
     # ── DashScope OpenAI 兼容接口（text-embedding-v3 等）─────────
 

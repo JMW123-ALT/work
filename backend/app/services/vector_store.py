@@ -46,6 +46,8 @@ DOCUMENT_COLUMNS = {
     "file_path": "TEXT NOT NULL DEFAULT ''",
     "mime_type": "TEXT NOT NULL DEFAULT ''",
     "file_size": "INTEGER NOT NULL DEFAULT 0",
+    "file_sha256": "TEXT NOT NULL DEFAULT ''",
+    "content_sha256": "TEXT NOT NULL DEFAULT ''",
     "chunk_count": "INTEGER NOT NULL DEFAULT 0",
     "extraction_status": "TEXT NOT NULL DEFAULT 'parsed'",
     "runtime": "INTEGER NOT NULL DEFAULT 0",
@@ -107,12 +109,28 @@ class VectorStore:
                     content TEXT NOT NULL,
                     modality TEXT NOT NULL,
                     parser TEXT NOT NULL,
+                    page_number INTEGER NOT NULL DEFAULT 0,
+                    asset_path TEXT NOT NULL DEFAULT '',
+                    asset_mime_type TEXT NOT NULL DEFAULT '',
+                    embedding_modality TEXT NOT NULL DEFAULT 'text',
                     vector_json TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     FOREIGN KEY(source_id) REFERENCES documents(source_id)
                 )
                 """
             )
+            chunk_existing = {
+                row["name"]
+                for row in self.conn.execute("PRAGMA table_info(chunks)").fetchall()
+            }
+            for name, spec in {
+                "page_number": "INTEGER NOT NULL DEFAULT 0",
+                "asset_path": "TEXT NOT NULL DEFAULT ''",
+                "asset_mime_type": "TEXT NOT NULL DEFAULT ''",
+                "embedding_modality": "TEXT NOT NULL DEFAULT 'text'",
+            }.items():
+                if name not in chunk_existing:
+                    self.conn.execute(f"ALTER TABLE chunks ADD COLUMN {name} {spec}")
             self.conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_documents_permission ON documents(permission_level)"
             )
@@ -148,12 +166,13 @@ class VectorStore:
                 SELECT source_id, title, content, object_type, permission_level,
                        access_channel, original_ref_uri, section_path, modality,
                        file_name, file_path, mime_type, file_size, chunk_count,
-                       extraction_status, runtime, created_at, updated_at
+                       file_sha256, content_sha256, extraction_status, runtime,
+                       created_at, updated_at
                 FROM documents
                 ORDER BY runtime ASC, updated_at DESC, source_id ASC
                 """
             ).fetchall()
-        return [dict(row) for row in rows]
+        return self._dedupe_documents([dict(row) for row in rows])
 
     def get_document(self, source_id: str) -> dict | None:
         with self.lock:
@@ -162,7 +181,8 @@ class VectorStore:
                 SELECT source_id, title, content, object_type, permission_level,
                        access_channel, original_ref_uri, section_path, modality,
                        file_name, file_path, mime_type, file_size, chunk_count,
-                       extraction_status, runtime, created_at, updated_at
+                       file_sha256, content_sha256, extraction_status, runtime,
+                       created_at, updated_at
                 FROM documents WHERE source_id = ?
                 """,
                 (source_id,),
@@ -195,17 +215,22 @@ class VectorStore:
             "file_path": payload.get("file_path") or "",
             "mime_type": payload.get("mime_type") or "",
             "file_size": int(payload.get("file_size") or 0),
+            "file_sha256": payload.get("file_sha256") or "",
+            "content_sha256": self._hash_text(content),
             "extraction_status": payload.get("extraction_status") or "parsed",
         }
         return self.upsert_document(doc, runtime=True)
 
     def add_file_document(self, fields: dict, file_item: dict) -> dict:
         original_name = file_item["filename"]
-        source_id = fields.get("source_id") or f"src-{uuid.uuid4().hex[:8]}"
+        file_bytes = file_item["data"]
+        file_sha256 = self._hash_bytes(file_bytes)
+        source_id = fields.get("source_id") or self._source_id_for_file_hash(file_sha256)
+        source_id = source_id or f"src-file-{file_sha256[:12]}"
         safe_name = self._safe_file_name(original_name)
         stored_name = f"{source_id}-{safe_name}"
         file_path = UPLOAD_DIR / stored_name
-        file_path.write_bytes(file_item["data"])
+        file_path.write_bytes(file_bytes)
 
         title = (fields.get("title") or Path(original_name).stem or "Untitled").strip()
         extracted = chunking_client.extract_placeholder(
@@ -226,7 +251,9 @@ class VectorStore:
             "file_name": original_name,
             "file_path": str(file_path),
             "mime_type": file_item.get("content_type", ""),
-            "file_size": len(file_item["data"]),
+            "file_size": len(file_bytes),
+            "file_sha256": file_sha256,
+            "content_sha256": self._hash_text(extracted["content"]),
             "extraction_status": extracted["extraction_status"],
         }
         return self.upsert_document(doc, runtime=True)
@@ -241,6 +268,8 @@ class VectorStore:
             content=doc.get("content", ""),
             modality=doc.get("modality", "text"),
             section_path=doc.get("section_path", doc["title"]),
+            file_path=doc.get("file_path", ""),
+            mime_type=doc.get("mime_type", ""),
         )
 
         # 文档级聚合向量只取「标题 + 正文前 500 字」作为文档代表向量。
@@ -262,7 +291,7 @@ class VectorStore:
 
         chunk_vectors = []
         for chunk in chunks:
-            raw_vector = embedding_client.embed_text(f"{doc['title']} {chunk['content']}")
+            raw_vector = self._embed_chunk(doc, chunk)
             chunk_vectors.append(
                 {
                     "chunk": chunk,
@@ -290,8 +319,9 @@ class VectorStore:
                         source_id, title, content, object_type, permission_level,
                         access_channel, original_ref_uri, section_path, vector_json,
                         modality, file_name, file_path, mime_type, file_size,
-                        chunk_count, extraction_status, runtime, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        file_sha256, content_sha256, chunk_count, extraction_status,
+                        runtime, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(source_id) DO UPDATE SET
                         title = excluded.title,
                         content = excluded.content,
@@ -306,6 +336,8 @@ class VectorStore:
                         file_path = excluded.file_path,
                         mime_type = excluded.mime_type,
                         file_size = excluded.file_size,
+                        file_sha256 = excluded.file_sha256,
+                        content_sha256 = excluded.content_sha256,
                         chunk_count = excluded.chunk_count,
                         extraction_status = excluded.extraction_status,
                         runtime = excluded.runtime,
@@ -326,6 +358,8 @@ class VectorStore:
                         doc.get("file_path", ""),
                         doc.get("mime_type", ""),
                         int(doc.get("file_size") or 0),
+                        doc.get("file_sha256", ""),
+                        doc.get("content_sha256") or self._hash_text(doc.get("content", "")),
                         len(chunks),
                         doc.get("extraction_status", "parsed"),
                         1 if runtime else 0,
@@ -341,8 +375,9 @@ class VectorStore:
                         """
                         INSERT INTO chunks (
                             chunk_id, source_id, chunk_index, section_path, content,
-                            modality, parser, vector_json, created_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            modality, parser, page_number, asset_path, asset_mime_type,
+                            embedding_modality, vector_json, created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             chunk["chunk_id"],
@@ -352,6 +387,10 @@ class VectorStore:
                             chunk["content"],
                             chunk.get("modality", doc.get("modality", "text")),
                             chunk.get("parser", "placeholder_chunker"),
+                            int(chunk.get("page_number") or 0),
+                            chunk.get("asset_path", ""),
+                            chunk.get("asset_mime_type", ""),
+                            chunk.get("embedding_modality", "text"),
                             item["vector_json"],
                             now,
                         ),
@@ -392,7 +431,8 @@ class VectorStore:
         if total_vectors <= 0:
             return {"items": [], "blockedCount": blocked_count}
 
-        n_results = min(max(int(top_k), 1), total_vectors)
+        requested = max(int(top_k), 1)
+        n_results = min(max(requested * 4, requested), total_vectors)
         query_kwargs: dict[str, Any] = {
             "query_embeddings": [query_embedding],
             "n_results": n_results,
@@ -402,7 +442,7 @@ class VectorStore:
             query_kwargs["where"] = {"permission_level": {"$in": allowed_permissions}}
 
         result = self.collection.query(**query_kwargs)
-        items = self._format_chroma_results(result)
+        items = self._dedupe_search_items(self._format_chroma_results(result))
         return {"items": items[:top_k], "blockedCount": blocked_count}
 
     def similarity_search_with_relevance_scores(
@@ -538,6 +578,10 @@ class VectorStore:
             ),
             "modality": chunk.get("modality") or doc.get("modality", "text"),
             "parser": chunk.get("parser") or "placeholder_chunker",
+            "page_number": int(chunk.get("page_number") or 0),
+            "asset_path": chunk.get("asset_path", ""),
+            "asset_mime_type": chunk.get("asset_mime_type", ""),
+            "embedding_modality": chunk.get("embedding_modality", "text"),
             "title": doc["title"],
             "object_type": doc.get("object_type", "internal_doc"),
             "permission_level": doc.get("permission_level", "public"),
@@ -546,6 +590,8 @@ class VectorStore:
             "file_name": doc.get("file_name", ""),
             "mime_type": doc.get("mime_type", ""),
             "file_size": int(doc.get("file_size") or 0),
+            "file_sha256": str(doc.get("file_sha256", "")),
+            "content_sha256": str(doc.get("content_sha256", "")),
             "chunk_count": int(chunk_count),
             "extraction_status": doc.get("extraction_status", "parsed"),
             "runtime": 1 if runtime else 0,
@@ -576,6 +622,10 @@ class VectorStore:
                 "chunk_content": content,
                 "chunk_modality": modality,
                 "parser": str(metadata.get("parser", "")),
+                "page_number": self._metadata_int(metadata, "page_number"),
+                "asset_path": str(metadata.get("asset_path", "")),
+                "asset_mime_type": str(metadata.get("asset_mime_type", "")),
+                "embedding_modality": str(metadata.get("embedding_modality", "text")),
                 "source_id": str(metadata.get("source_id", "")),
                 "title": str(metadata.get("title", "")),
                 "object_type": str(metadata.get("object_type", "internal_doc")),
@@ -587,6 +637,8 @@ class VectorStore:
                 "file_name": str(metadata.get("file_name", "")),
                 "mime_type": str(metadata.get("mime_type", "")),
                 "file_size": self._metadata_int(metadata, "file_size"),
+                "file_sha256": str(metadata.get("file_sha256", "")),
+                "content_sha256": str(metadata.get("content_sha256", "")),
                 "chunk_count": self._metadata_int(metadata, "chunk_count"),
                 "extraction_status": str(metadata.get("extraction_status", "parsed")),
                 "runtime": self._metadata_int(metadata, "runtime"),
@@ -599,6 +651,17 @@ class VectorStore:
             items.append(item)
 
         return items
+
+    def _embed_chunk(self, doc: dict, chunk: dict) -> dict:
+        text = f"{doc['title']} {chunk['content']}"
+        asset_path = str(chunk.get("asset_path") or "")
+        if asset_path:
+            return embedding_client.embed_multimodal(
+                text,
+                image_path=asset_path,
+                mime_type=str(chunk.get("asset_mime_type") or doc.get("mime_type") or ""),
+            )
+        return embedding_client.embed_text(text)
 
     def _blocked_count(self, user_type: str) -> int:
         with self.lock:
@@ -679,6 +742,73 @@ class VectorStore:
             return int(metadata.get(key) or 0)
         except (TypeError, ValueError):
             return 0
+
+    def _source_id_for_file_hash(self, file_sha256: str) -> str | None:
+        if not file_sha256:
+            return None
+        with self.lock:
+            row = self.conn.execute(
+                """
+                SELECT source_id
+                FROM documents
+                WHERE file_sha256 = ?
+                ORDER BY updated_at DESC, source_id ASC
+                LIMIT 1
+                """,
+                (file_sha256,),
+            ).fetchone()
+        return str(row["source_id"]) if row else None
+
+    def _dedupe_documents(self, items: list[dict]) -> list[dict]:
+        seen: set[str] = set()
+        unique: list[dict] = []
+        for item in items:
+            key = self._document_dedupe_key(item)
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(item)
+        return unique
+
+    def _document_dedupe_key(self, item: dict) -> str:
+        file_sha256 = str(item.get("file_sha256") or "")
+        if file_sha256:
+            return f"file-sha:{file_sha256}"
+        file_name = str(item.get("file_name") or "").strip().lower()
+        file_size = int(item.get("file_size") or 0)
+        title = str(item.get("title") or "").strip().lower()
+        if file_name and file_size:
+            return f"file-meta:{title}:{file_name}:{file_size}"
+        content_sha256 = str(item.get("content_sha256") or "")
+        if content_sha256:
+            return f"content-sha:{content_sha256}"
+        return f"source:{item.get('source_id')}"
+
+    def _dedupe_search_items(self, items: list[dict]) -> list[dict]:
+        seen: set[str] = set()
+        unique: list[dict] = []
+        for item in items:
+            asset_path = str(item.get("asset_path") or "")
+            if asset_path:
+                key = f"asset:{asset_path}:{item.get('chunk_id')}"
+            else:
+                content = str(item.get("content") or item.get("chunk_content") or "")
+                normalized = re.sub(r"\s+", "", content)
+                key = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(item)
+        return unique
+
+    def _hash_bytes(self, value: bytes) -> str:
+        return hashlib.sha256(value or b"").hexdigest()
+
+    def _hash_text(self, value: str) -> str:
+        normalized = re.sub(r"\s+", "", value or "")
+        if not normalized:
+            return ""
+        return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
     def _safe_file_name(self, filename: str) -> str:
         clean = re.sub(

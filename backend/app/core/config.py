@@ -42,14 +42,16 @@ class Settings(BaseSettings):
     embedding_provider: str = "dashscope"
     embedding_api_key: str = ""
     embedding_base_url: str = "https://dashscope.aliyuncs.com/api/v1"
+    embedding_dashscope_url: str = "https://dashscope.aliyuncs.com/api/v1"
     embedding_model: str = "qwen3-vl-embedding"
 
     # 阿里 DashScope Rerank 配置
     # RERANK_PROVIDER=dashscope 时启用真实 rerank
     rerank_provider: str = "passthrough"
+    rerank_enabled: bool = False
     rerank_api_key: str = ""
-    rerank_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    rerank_model: str = "gte-rerank"
+    rerank_base_url: str = "https://dashscope.aliyuncs.com/api/v1"
+    rerank_model: str = "qwen3-vl-rerank"
 
     # 文件解析 / OCR 配置
     # PDF/Office 优先使用本地解析库；图片和扫描版 PDF 可选接入 DashScope OCR/VL 模型
@@ -71,12 +73,13 @@ class Settings(BaseSettings):
     # 数据目录（运行时确保存在）
     data_dir: Path = Field(default_factory=lambda: PROJECT_ROOT / "backend" / "data")
     upload_dir: Path = Field(default_factory=lambda: PROJECT_ROOT / "backend" / "data" / "uploads")
+    asset_dir: Path = Field(default_factory=lambda: PROJECT_ROOT / "backend" / "data" / "assets")
 
     # 日志配置
     log_level: str = "INFO"
     log_format: Literal["json", "text"] = "text"
 
-    @field_validator("data_dir", "upload_dir", "chroma_path", mode="before")
+    @field_validator("data_dir", "upload_dir", "asset_dir", "chroma_path", mode="before")
     @classmethod
     def resolve_project_relative_paths(cls, v: Path | str) -> Path:
         path = Path(v)
@@ -84,7 +87,7 @@ class Settings(BaseSettings):
             return path
         return PROJECT_ROOT / path
 
-    @field_validator("data_dir", "upload_dir", "chroma_path", mode="after")
+    @field_validator("data_dir", "upload_dir", "asset_dir", "chroma_path", mode="after")
     @classmethod
     def ensure_dirs_exist(cls, v: Path) -> Path:
         v.mkdir(parents=True, exist_ok=True)

@@ -16,7 +16,8 @@
         </div>
       </div>
       <nav>
-        <button class="nav-item active" data-view="ask">AI 问答</button>
+        <button class="nav-item active" data-view="agent">文创 Agent</button>
+        <button class="nav-item" data-view="ask">AI 问答</button>
         <button class="nav-item" data-view="search">向量检索</button>
         <button class="nav-item" data-view="ingest" id="ingestNav">资料入库</button>
         <button class="nav-item" data-view="docs">资料库</button>
@@ -57,7 +58,62 @@
         </div>
       </header>
 
-      <section class="view active" id="view-ask">
+      <section class="view active" id="view-agent">
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>文创 Agent 测试</h2>
+              <p>基于已入库资料生成文化考据、方案设计和传播文案。</p>
+            </div>
+            <div id="agentStatus" class="status-pill muted">等待输入</div>
+          </div>
+          <div class="agent-grid">
+            <label class="wide">需求
+              <textarea id="agentQuery">根据秀洲区郊野公园概念方案给我出一个方案</textarea>
+            </label>
+            <label>Top K
+              <input id="agentTopK" type="number" min="1" max="50" value="5" />
+            </label>
+            <label>最低置信度
+              <input id="agentMinConfidence" type="number" min="0" max="1" step="0.05" value="0.7" />
+            </label>
+            <div class="agent-actions">
+              <button id="agentBtn">生成方案</button>
+            </div>
+          </div>
+          <div class="agent-summary">
+            <div>
+              <span>工作流</span>
+              <strong id="agentWorkflow">-</strong>
+            </div>
+            <div>
+              <span>意图</span>
+              <strong id="agentIntent">-</strong>
+            </div>
+            <div>
+              <span>证据</span>
+              <strong id="agentEvidenceCount">0</strong>
+            </div>
+            <div>
+              <span>LLM</span>
+              <strong id="agentLlmState">-</strong>
+            </div>
+          </div>
+          <div id="agentWarnings" class="notice-list"></div>
+          <div class="split-view">
+            <section>
+              <h3>最终方案</h3>
+              <div id="agentAnswer" class="answer empty">等待生成</div>
+            </section>
+            <section>
+              <h3>引用资料</h3>
+              <div id="agentEvidenceList" class="result-list"></div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-ask">
         <div class="panel">
           <h2>AI 检索问答</h2>
           <div class="input-row">

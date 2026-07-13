@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 import mimetypes
+import re
 import urllib.request
 from pathlib import Path
 
@@ -66,6 +67,7 @@ class ChunkingClient:
     # RecursiveCharacterTextSplitter 按优先级逐级尝试以下分隔符：
     #   双换行（段落）→ 单换行 → 中文句末标点 → 英文句末标点 → 空格 → 单字符
     _SEPARATORS = ["\n\n", "\n", "。", "！", "？", "；", ".", "!", "?", ";", " ", ""]
+    _PDF_PAGE_PATTERN = re.compile(r"【第\s*(\d+)\s*页】")
 
     def chunk_document(
         self,
@@ -74,6 +76,8 @@ class ChunkingClient:
         content: str,
         modality: str,
         section_path: str = "",
+        file_path: str = "",
+        mime_type: str = "",
     ) -> list[dict]:
         """使用 LangChain RecursiveCharacterTextSplitter 切分文档。
 
@@ -85,13 +89,23 @@ class ChunkingClient:
         except ImportError:
             logger.warning(
                 "langchain-text-splitters 未安装，降级为固定长度切分。"
-                "请运行 pip install langchain-text-splitters==0.3.8"
+                "请运行 pip install langchain-text-splitters==1.1.2"
             )
             return self._chunk_fixed(source_id, title, content, modality, section_path)
 
         text = (content or "").strip()
         if not text:
             text = f"{title} 已上传，等待解析。"
+
+        if modality == "image":
+            return self._chunk_image_asset(
+                source_id=source_id,
+                title=title,
+                text=text,
+                section_path=section_path,
+                file_path=file_path,
+                mime_type=mime_type,
+            )
 
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=self.CHUNK_SIZE,
@@ -100,6 +114,20 @@ class ChunkingClient:
             length_function=len,
             is_separator_regex=False,
         )
+        if modality == "pdf":
+            page_assets = self._render_pdf_page_assets(source_id, file_path)
+            page_chunks = self._chunk_pdf_pages(
+                splitter,
+                source_id=source_id,
+                title=title,
+                text=text,
+                modality=modality,
+                section_path=section_path,
+                page_assets=page_assets,
+            )
+            if page_chunks:
+                return page_chunks
+
         raw_chunks = splitter.split_text(text)
 
         chunks = []
@@ -119,6 +147,117 @@ class ChunkingClient:
                 }
             )
         return chunks
+
+    def _chunk_image_asset(
+        self,
+        *,
+        source_id: str,
+        title: str,
+        text: str,
+        section_path: str,
+        file_path: str,
+        mime_type: str,
+    ) -> list[dict]:
+        return [
+            {
+                "chunk_id": f"{source_id}-chunk-0000",
+                "source_id": source_id,
+                "chunk_index": 0,
+                "section_path": section_path or title,
+                "content": text,
+                "modality": "image",
+                "parser": "image_multimodal_asset",
+                "page_number": 0,
+                "asset_path": file_path,
+                "asset_mime_type": mime_type or "image/png",
+                "embedding_modality": "image" if file_path else "text",
+            }
+        ]
+
+    def _render_pdf_page_assets(self, source_id: str, file_path: str) -> dict[str, str]:
+        if not file_path:
+            return {}
+        path = Path(file_path)
+        if not path.exists():
+            return {}
+        try:
+            import fitz  # PyMuPDF
+        except ImportError:
+            return {}
+
+        output_dir = settings.asset_dir / source_id
+        output_dir.mkdir(parents=True, exist_ok=True)
+        page_assets: dict[str, str] = {}
+        try:
+            with fitz.open(path) as doc:
+                for page_index, page in enumerate(doc, start=1):
+                    asset_path = output_dir / f"page-{page_index:04d}.jpg"
+                    if not asset_path.exists():
+                        pix = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5), alpha=False)
+                        pix.save(str(asset_path))
+                    page_assets[str(page_index)] = str(asset_path)
+        except Exception as exc:
+            logger.warning("PDF page asset rendering failed for %s: %s", file_path, exc)
+            return {}
+        return page_assets
+
+    def _chunk_pdf_pages(
+        self,
+        splitter,
+        *,
+        source_id: str,
+        title: str,
+        text: str,
+        modality: str,
+        section_path: str,
+        page_assets: dict[str, str] | None = None,
+    ) -> list[dict]:
+        pages = self._split_pdf_pages(text)
+        if not pages:
+            return []
+
+        chunks = []
+        index = 0
+        base_section = section_path or title
+        page_assets = page_assets or {}
+        for page_no, page_text in pages:
+            page_asset = page_assets.get(str(page_no), "")
+            page_section = f"{base_section} / 第 {page_no} 页"
+            for raw_chunk in splitter.split_text(page_text):
+                chunk_text = raw_chunk.strip()
+                if not chunk_text:
+                    continue
+                chunks.append(
+                    {
+                        "chunk_id": f"{source_id}-chunk-{index:04d}",
+                        "source_id": source_id,
+                        "chunk_index": index,
+                        "section_path": page_section,
+                        "content": chunk_text,
+                        "modality": modality,
+                        "parser": "langchain_pdf_page_splitter",
+                        "page_number": int(page_no),
+                        "asset_path": page_asset,
+                        "asset_mime_type": "image/jpeg" if page_asset else "",
+                        "embedding_modality": "pdf_page" if page_asset else "text",
+                    }
+                )
+                index += 1
+        return chunks
+
+    def _split_pdf_pages(self, text: str) -> list[tuple[str, str]]:
+        matches = list(self._PDF_PAGE_PATTERN.finditer(text))
+        if not matches:
+            return []
+
+        pages = []
+        for index, match in enumerate(matches):
+            start = match.end()
+            end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+            page_text = text[start:end].strip()
+            if page_text:
+                pages.append((match.group(1), page_text))
+        return pages
 
     def _chunk_fixed(
         self,
@@ -178,7 +317,7 @@ class ChunkingClient:
         try:
             with fitz.open(file_path) as doc:
                 for page_index, page in enumerate(doc, start=1):
-                    text = page.get_text("text").strip()
+                    text = self._extract_pdf_page_text(page)
                     if not text and self._ocr_enabled():
                         pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
                         text = self._ocr_bytes(
@@ -199,6 +338,24 @@ class ChunkingClient:
             f"PDF 文件 {file_path.name} 已上传，但未提取到文本。若这是扫描版 PDF，请配置 OCR 后重新入库。",
             "pending_pdf_ocr",
         )
+
+    def _extract_pdf_page_text(self, page) -> str:
+        blocks = []
+        try:
+            for block in page.get_text("blocks"):
+                if len(block) < 5:
+                    continue
+                x0, y0, _x1, _y1, text = block[:5]
+                text = str(text).strip()
+                if text:
+                    blocks.append((round(float(y0), 1), round(float(x0), 1), text))
+        except Exception:
+            blocks = []
+
+        if blocks:
+            blocks.sort(key=lambda item: (item[0], item[1]))
+            return "\n".join(item[2] for item in blocks).strip()
+        return page.get_text("text").strip()
 
     def _extract_image(self, file_path: Path, mime_type: str) -> tuple[str, str]:
         if not self._ocr_enabled():

@@ -5,23 +5,67 @@ Rerank 客户端
 
 接口文档：https://help.aliyun.com/zh/dashscope/developer-reference/text-rerank
 """
+import base64
 import json
+import mimetypes
+from pathlib import Path
 
 from app.core.config import settings
 
 # DashScope rerank endpoint
-_RERANK_URL = "https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank"
+_RERANK_PATH = "services/rerank/text-rerank/text-rerank"
+
+
+def rerank_url(base_url: str) -> str:
+    clean_base = (base_url or "https://dashscope.aliyuncs.com/api/v1").rstrip("/")
+    if clean_base.endswith(_RERANK_PATH):
+        return clean_base
+    return f"{clean_base}/{_RERANK_PATH}"
+
+
+def is_multimodal_rerank_model(model: str) -> bool:
+    return "vl" in (model or "").lower() or "multimodal" in (model or "").lower()
+
+
+def build_rerank_documents(chunks: list[dict], *, multimodal: bool) -> list:
+    documents = []
+    for chunk in chunks:
+        text = chunk.get("content") or chunk.get("snippet") or chunk.get("chunk_content") or ""
+        if not multimodal:
+            documents.append(text)
+            continue
+
+        document: dict[str, str] = {"text": text or " "}
+        asset_path = str(chunk.get("asset_path") or "")
+        asset_url = str(chunk.get("asset_url") or "")
+        if asset_url:
+            document["image"] = asset_url
+        elif asset_path and Path(asset_path).exists():
+            path = Path(asset_path)
+            mime_type = (
+                str(chunk.get("asset_mime_type") or "")
+                or mimetypes.guess_type(path.name)[0]
+                or "image/png"
+            )
+            encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+            document["image"] = f"data:{mime_type};base64,{encoded}"
+        documents.append(document)
+    return documents
 
 
 class RerankClient:
     def __init__(self) -> None:
         self.provider = settings.rerank_provider
-        self.model = settings.rerank_model or "gte-rerank"
+        self.model = settings.rerank_model or "qwen3-rerank"
 
     # ── 公共接口 ──────────────────────────────────────────────────
 
     def rerank(self, query: str, chunks: list[dict], top_n: int = 5) -> dict:
-        if self.provider == "dashscope" and settings.rerank_api_key:
+        if (
+            self.provider == "dashscope"
+            and settings.rerank_enabled
+            and settings.rerank_api_key
+        ):
             return self._rerank_dashscope(query, chunks, top_n)
         return self._passthrough(chunks, top_n)
 
@@ -56,21 +100,25 @@ class RerankClient:
         """
         import urllib.request
 
-        documents = [c.get("content") or c.get("snippet") or "" for c in chunks]
+        multimodal = is_multimodal_rerank_model(self.model)
+        documents = build_rerank_documents(chunks, multimodal=multimodal)
         if not documents:
             return self._passthrough(chunks, top_n)
 
         payload = json.dumps(
             {
                 "model": self.model,
-                "input": {"query": query, "documents": documents},
+                "input": {
+                    "query": {"text": query} if multimodal else query,
+                    "documents": documents,
+                },
                 "parameters": {"top_n": top_n, "return_documents": False},
             },
             ensure_ascii=False,
         ).encode("utf-8")
 
         req = urllib.request.Request(
-            _RERANK_URL,
+            rerank_url(settings.rerank_base_url),
             data=payload,
             headers={
                 "Content-Type": "application/json",
