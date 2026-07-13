@@ -1,8 +1,6 @@
 """
 文档相关响应模型
 """
-from typing import Any
-
 from pydantic import BaseModel
 
 

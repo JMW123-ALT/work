@@ -1,39 +1,55 @@
-# 架构说明
+# 项目架构
 
-## 当前雏形
+当前项目采用单后端、单端口、单数据目录。
 
 ```text
-Web 前端
-  -> /api/ingest 资料登记
-  -> /api/search 权限过滤检索
-  -> /api/ask RAG 问答
-  -> /api/audit 审计记录
+frontend
+  -> /api/chat        文创 Agent
+  -> /api/ask         RAG 问答
+  -> /api/search      语义检索
+  -> /api/ingest      资料入库
 
-后端服务
-  -> permissions.py 权限上下文
-  -> vector_store.py SQLite 持久化向量库
-  -> embedding_client.py 本地 embedding 占位
-  -> llm_client.py DeepSeek 占位
-  -> audit.py 使用记录
+backend/app
+  -> api/v1           FastAPI 路由
+  -> services/agent   LangGraph 文创 Agent 工作流
+  -> services/rag     检索、重排、问答编排
+  -> services/vector_store
+                      SQLite 元数据 + Chroma 向量库
+  -> services/llm_client
+                      OpenAI SDK + DeepSeek 调用入口
 ```
 
-## 向量库状态
+## 运行方式
 
-现在已经不再只使用内存检索。资料、metadata 和本地占位向量会写入：
+统一启动一个后端服务：
+
+```powershell
+.\run.ps1
+```
+
+默认地址：
+
+```text
+http://127.0.0.1:8000/api/docs
+```
+
+## 数据目录
+
+入库、检索、RAG 和文创 Agent 共用同一套本地数据：
 
 ```text
 backend/data/vector_store.sqlite3
+backend/data/chroma/
+backend/data/uploads/
 ```
 
-`vector_store.py` 保持了 `list_documents`、`add_document`、`search` 等接口，后续切换 Chroma 时尽量不影响 Web 和 RAG 服务。
+同事更新入库数据后，只要这些目录和集合保持一致，文创 Agent 会通过内部 `rag_service` 直接使用，不再走第二个 Agent 服务或 HTTP 检索适配器。
 
-## 下一步替换点
+## 验证
 
-- `embedding_client.py`：接入真实 embedding API。
-- `vector_store.py`：如果确认 Chroma 包或服务可用，可替换为 Chroma collection `tourism_knowledge_vectors`。
-- `llm_client.py`：接入 DeepSeek，使用检索片段生成结构化回答。
-- `permissions.py`：从真实用户系统或 MySQL 获取权限上下文。
+最小链路 smoke：
 
-## 权限原则
-
-无权限命中时，只返回“存在更高权限资料”的提示，不返回标题、客户名、项目名、原始数值或附件路径。
+```powershell
+cd backend
+..\.venv\Scripts\python.exe scripts\smoke_agent.py
+```

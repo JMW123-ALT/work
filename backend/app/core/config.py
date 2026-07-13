@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     """应用配置，所有字段均可通过 .env 覆盖"""
 
     # 应用基础配置
-    app_name: str = "Tourism Vector API"
+    app_name: str = "Wenchuang Agent API"
     app_env: Literal["local", "dev", "staging", "prod"] = "local"
     app_host: str = "127.0.0.1"
     app_port: int = 8000
@@ -60,10 +60,8 @@ class Settings(BaseSettings):
     parser_ocr_model: str = "qwen-vl-ocr"
     parser_ocr_timeout: int = 60
 
-    # Chroma 向量数据库配置（预留，MVP 阶段使用 SQLite）
-    chroma_host: str = "127.0.0.1"
-    chroma_port: int = 8001
-    chroma_collection: str = "tourism_knowledge_vectors"
+    # Chroma 向量数据库配置：单后端直接读取本地 backend/data/chroma
+    chroma_collection: str = "wenchuang_knowledge"
     chroma_path: Path = Field(
         default_factory=lambda: PROJECT_ROOT / "backend" / "data" / "chroma"
     )
@@ -77,6 +75,14 @@ class Settings(BaseSettings):
     # 日志配置
     log_level: str = "INFO"
     log_format: Literal["json", "text"] = "text"
+
+    @field_validator("data_dir", "upload_dir", "chroma_path", mode="before")
+    @classmethod
+    def resolve_project_relative_paths(cls, v: Path | str) -> Path:
+        path = Path(v)
+        if path.is_absolute():
+            return path
+        return PROJECT_ROOT / path
 
     @field_validator("data_dir", "upload_dir", "chroma_path", mode="after")
     @classmethod

@@ -6,7 +6,7 @@
 """
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile, status
 
 from app.api.deps import AuditStoreDep, VectorStoreDep
 from app.core.exceptions import PermissionDeniedError
@@ -95,7 +95,7 @@ def ingest_file(
     vs: VectorStoreDep,
     audit: AuditStoreDep,
     background_tasks: BackgroundTasks,
-    files: list[UploadFile],
+    files: Annotated[list[UploadFile], File()],
     ingest_role: Annotated[str, Form()] = "none",
     operator: Annotated[str, Form()] = "local-admin",
     permission_level: Annotated[PermissionLevel, Form()] = "public",
@@ -167,7 +167,7 @@ def ingest_compat(
     audit: AuditStoreDep,
     background_tasks: BackgroundTasks,
     # 文件字段（可选）
-    files: list[UploadFile] | None = None,
+    files: Annotated[list[UploadFile] | None, File()] = None,
     # Form 字段（文件上传时由 multipart 传入）
     ingest_role: Annotated[str | None, Form()] = None,
     operator: Annotated[str | None, Form()] = None,

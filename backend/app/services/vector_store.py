@@ -405,6 +405,29 @@ class VectorStore:
         items = self._format_chroma_results(result)
         return {"items": items[:top_k], "blockedCount": blocked_count}
 
+    def similarity_search_with_relevance_scores(
+        self,
+        query: str,
+        *,
+        user_type: str = "visitor",
+        k: int = 5,
+    ) -> list[tuple[dict, float]]:
+        """LangChain-style Chroma search result without adding LangChain as a dependency."""
+
+        result = self.search(query, user_type=user_type, top_k=k)
+        pairs = []
+        for item in result["items"]:
+            document = {
+                "page_content": item.get("content") or item.get("chunk_content") or "",
+                "metadata": {
+                    key: value
+                    for key, value in item.items()
+                    if key not in {"content", "chunk_content"}
+                },
+            }
+            pairs.append((document, float(item.get("score") or 0.0)))
+        return pairs
+
     def stats(self) -> dict:
         with self.lock:
             total = self.conn.execute("SELECT COUNT(*) AS n FROM documents").fetchone()["n"]
