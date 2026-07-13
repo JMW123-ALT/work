@@ -19,12 +19,11 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-import chromadb
-
-from app.core.config import settings
-
 
 def delete_existing_collection() -> None:
+    import chromadb
+    from app.core.config import settings
+
     client = chromadb.PersistentClient(path=str(settings.chroma_path))
     try:
         client.delete_collection(settings.chroma_collection)
@@ -32,12 +31,10 @@ def delete_existing_collection() -> None:
         return
 
 
-delete_existing_collection()
-
-from app.services.vector_store import vector_store
-
-
 def main() -> None:
+    delete_existing_collection()
+    from app.services.vector_store import vector_store
+
     result = vector_store.rebuild_chroma_index()
     print(json.dumps(result, ensure_ascii=False, indent=2))
 

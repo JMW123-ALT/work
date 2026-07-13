@@ -15,8 +15,9 @@ os.environ["CHROMA_PATH"] = str(TEST_DATA_DIR / "chroma")
 os.environ["EMBEDDING_PROVIDER"] = "local"
 os.environ["EMBEDDING_API_KEY"] = ""
 os.environ["RERANK_PROVIDER"] = "passthrough"
+os.environ["DEEPSEEK_API_KEY"] = ""
 
-from app.main import create_app
+from app.main import create_app  # noqa: E402
 
 
 @pytest.fixture(scope="session")

@@ -2,10 +2,8 @@ $ErrorActionPreference = "Stop"
 
 $root = $PSScriptRoot
 $backendDir = Join-Path $root "backend"
-$agentDir = Join-Path $root "agent"
 $runtimeDir = Join-Path $root ".runtime"
 $backendVenv = Join-Path $backendDir ".venv"
-$agentVenv = Join-Path $agentDir ".venv"
 
 New-Item -ItemType Directory -Force -Path $runtimeDir | Out-Null
 
@@ -74,29 +72,18 @@ function Install-Requirements {
 }
 
 New-ProjectVenv -VenvPath $backendVenv
-New-ProjectVenv -VenvPath $agentVenv
 
 $backendPython = Join-Path $backendVenv "Scripts\python.exe"
-$agentPython = Join-Path $agentVenv "Scripts\python.exe"
 
 Install-Requirements -PythonExe $backendPython -RequirementsPath (Join-Path $backendDir "requirements.txt")
-Install-Requirements -PythonExe $agentPython -RequirementsPath (Join-Path $agentDir "requirements.txt")
 
 $backendOutLog = Join-Path $runtimeDir "backend.out.log"
 $backendErrLog = Join-Path $runtimeDir "backend.err.log"
-$agentOutLog = Join-Path $runtimeDir "agent.out.log"
-$agentErrLog = Join-Path $runtimeDir "agent.err.log"
+$appPort = if ($env:APP_PORT) { $env:APP_PORT } else { "8000" }
 
 $backendCommand = @"
 Set-Location '$backendDir'
-& '$backendPython' -m uvicorn app.main:app --host 127.0.0.1 --port 8001
-"@
-
-$agentCommand = @"
-Set-Location '$agentDir'
-`$env:RETRIEVER_PROVIDER = 'shujuku'
-`$env:SHUJUKU_SEARCH_URL = 'http://127.0.0.1:8001/api/v1/search'
-& '$agentPython' -m uvicorn wc_agent.api:app --host 127.0.0.1 --port 8000
+& '$backendPython' -m uvicorn app.main:app --host 127.0.0.1 --port $appPort
 "@
 
 $backendProcess = Start-Process powershell.exe `
@@ -106,28 +93,18 @@ $backendProcess = Start-Process powershell.exe `
   -WindowStyle Hidden `
   -PassThru
 
-$agentProcess = Start-Process powershell.exe `
-  -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $agentCommand) `
-  -RedirectStandardOutput $agentOutLog `
-  -RedirectStandardError $agentErrLog `
-  -WindowStyle Hidden `
-  -PassThru
-
-Write-Host "Backend API: http://127.0.0.1:8001/api/docs"
-Write-Host "Agent API:   http://127.0.0.1:8000/docs"
+Write-Host "Backend API: http://127.0.0.1:$appPort/api/docs"
+Write-Host "Agent chat:  http://127.0.0.1:$appPort/api/chat"
 Write-Host "Backend logs: $backendOutLog / $backendErrLog"
-Write-Host "Agent logs:   $agentOutLog / $agentErrLog"
-Write-Host "Press Ctrl+C to stop both services."
+Write-Host "Press Ctrl+C to stop the service."
 
 try {
-  while (-not $backendProcess.HasExited -and -not $agentProcess.HasExited) {
+  while (-not $backendProcess.HasExited) {
     Start-Sleep -Seconds 1
   }
 }
 finally {
-  foreach ($process in @($backendProcess, $agentProcess)) {
-    if ($process -and -not $process.HasExited) {
-      Stop-Process -Id $process.Id -Force
-    }
+  if ($backendProcess -and -not $backendProcess.HasExited) {
+    Stop-Process -Id $backendProcess.Id -Force
   }
 }

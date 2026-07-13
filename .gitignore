@@ -4,6 +4,8 @@ __pycache__/
 .runtime/
 docs/superpowers/
 .env
+.chroma/
+.idea/
 .claude/
 .claude/settings.local.json
 backend/.venv/

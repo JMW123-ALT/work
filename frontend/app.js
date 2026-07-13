@@ -98,11 +98,11 @@ async function ingest() {
       const form = new FormData();
       Object.entries(base).forEach(([key, value]) => form.append(key, value));
       files.forEach((file) => form.append("files", file));
-      const response = await fetch("/api/ingest", { method: "POST", body: form });
+      const response = await fetch("/api/v1/ingest/file", { method: "POST", body: form });
       data = await response.json();
       if (!response.ok) throw new Error(data.message || data.error || "上传失败");
     } else {
-      data = await api("/api/ingest", {
+      data = await api("/api/v1/ingest/text", {
         method: "POST",
         body: JSON.stringify({ ...base, modality: base.modality || "text" }),
       });

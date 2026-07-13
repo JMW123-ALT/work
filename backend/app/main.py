@@ -39,7 +39,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version="1.0.0",
-        description="旅游知识向量数据库 API（FastAPI 版）",
+        description="文旅文创知识库与文创 Agent API（FastAPI 版）",
         docs_url="/api/docs" if settings.app_env != "prod" else None,
         redoc_url="/api/redoc" if settings.app_env != "prod" else None,
         openapi_url="/api/openapi.json" if settings.app_env != "prod" else None,
