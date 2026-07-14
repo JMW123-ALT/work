@@ -6,6 +6,13 @@ pydantic-settings==2.5.0
 chromadb==1.5.9
 openai==2.45.0
 langgraph==1.2.9
+SQLAlchemy==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+psycopg[binary]==3.2.3
+redis==5.2.1
+celery==5.4.0
+structlog==24.4.0
 
 # 文件上传处理（UploadFile + Form 必须）
 python-multipart==0.0.9

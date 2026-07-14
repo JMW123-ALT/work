@@ -6,6 +6,8 @@ import logging
 import sys
 from typing import Any
 
+import structlog
+
 
 def _make_formatter(log_format: str) -> logging.Formatter:
     if log_format == "json":
@@ -29,6 +31,27 @@ def _make_formatter(log_format: str) -> logging.Formatter:
     return logging.Formatter("%(asctime)s  %(levelname)-8s  %(name)s  %(message)s")
 
 
+def _configure_structlog(log_format: str) -> None:
+    renderer = (
+        structlog.processors.JSONRenderer()
+        if log_format == "json"
+        else structlog.processors.KeyValueRenderer(key_order=["timestamp", "level", "logger", "event"])
+    )
+    structlog.configure(
+        processors=[
+            structlog.stdlib.add_logger_name,
+            structlog.stdlib.add_log_level,
+            structlog.processors.TimeStamper(fmt="iso", key="timestamp"),
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            renderer,
+        ],
+        wrapper_class=structlog.stdlib.BoundLogger,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=True,
+    )
+
+
 def setup_logging() -> logging.Logger:
     # 延迟 import，避免循环（settings 模块本身不依赖 logging）
     from app.core.config import settings
@@ -40,6 +63,7 @@ def setup_logging() -> logging.Logger:
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(_make_formatter(settings.log_format))
     root.addHandler(handler)
+    _configure_structlog(settings.log_format)
 
     # 降低第三方库噪音
     for noisy in ("uvicorn.access", "httpx", "httpcore"):
@@ -48,4 +72,9 @@ def setup_logging() -> logging.Logger:
     return logging.getLogger("app")
 
 
+def get_logger(name: str = "app") -> structlog.stdlib.BoundLogger:
+    return structlog.stdlib.get_logger(name)
+
+
 logger = setup_logging()
+structured_logger = get_logger("app")

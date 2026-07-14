@@ -92,6 +92,7 @@ def _to_agent_search_item(item: dict) -> dict:
     permission_level = str(item.get("permission_level") or "public")
     metadata_keys = (
         "chunk_id",
+        "legacy_chunk_id",
         "source_id",
         "chunk_index",
         "title",
@@ -102,6 +103,10 @@ def _to_agent_search_item(item: dict) -> dict:
         "original_ref_uri",
         "modality",
         "parser",
+        "page_number",
+        "asset_path",
+        "asset_mime_type",
+        "embedding_modality",
         "file_name",
         "mime_type",
         "file_size",

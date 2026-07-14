@@ -31,6 +31,14 @@ class Settings(BaseSettings):
     cors_allow_methods: list[str] = Field(default=["*"])
     cors_allow_headers: list[str] = Field(default=["*"])
 
+    # Platform infrastructure placeholders. The current v1 app keeps its
+    # working SQLite/Chroma path until the PostgreSQL milestone is implemented.
+    database_url: str = ""
+    database_url_sync: str = ""
+    redis_url: str = "redis://localhost:6379/0"
+    celery_broker_url: str = "redis://localhost:6379/1"
+    celery_result_backend: str = "redis://localhost:6379/2"
+
     # DeepSeek LLM 配置（回答问题）
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
@@ -64,6 +72,7 @@ class Settings(BaseSettings):
 
     # Chroma 向量数据库配置：单后端直接读取本地 backend/data/chroma
     chroma_collection: str = "wenchuang_knowledge"
+    chroma_collection_v2: str = "wenchuang_knowledge_v2"
     chroma_path: Path = Field(
         default_factory=lambda: PROJECT_ROOT / "backend" / "data" / "chroma"
     )
