@@ -16,6 +16,8 @@ os.environ["EMBEDDING_PROVIDER"] = "local"
 os.environ["EMBEDDING_API_KEY"] = ""
 os.environ["RERANK_PROVIDER"] = "passthrough"
 os.environ["DEEPSEEK_API_KEY"] = ""
+os.environ["DATABASE_URL"] = ""
+os.environ["DATABASE_URL_SYNC"] = ""
 
 from app.main import create_app  # noqa: E402
 
