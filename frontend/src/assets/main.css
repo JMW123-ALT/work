@@ -1,0 +1,188 @@
+/* ── 全局 CSS 变量 ── */
+:root {
+  --sidebar-width: 220px;
+  --sidebar-collapsed-width: 64px;
+  --topbar-height: 56px;
+  --color-primary: #1677ff;
+  --color-sidebar-bg: #001529;
+  --color-sidebar-text: rgba(255, 255, 255, 0.75);
+  --color-sidebar-active: #1677ff;
+  --color-page-bg: #f0f2f5;
+  --color-card-bg: #ffffff;
+  --color-border: #e8e8e8;
+  --color-text-primary: #1a1a1a;
+  --color-text-secondary: #666;
+  --color-text-muted: #999;
+  --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.08);
+  --radius-card: 8px;
+  --transition-base: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #app {
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
+  font-size: 14px;
+  color: var(--color-text-primary);
+  background: var(--color-page-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── 滚动条美化 ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d0d0d0; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #b0b0b0; }
+
+/* ── 通用页面容器 ── */
+.page-container {
+  padding: 24px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.page-header {
+  margin-bottom: 20px;
+}
+
+.page-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  line-height: 1.4;
+}
+
+.page-desc {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+}
+
+/* ── 卡片 ── */
+.work-card {
+  background: var(--color-card-bg);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 20px 24px;
+  border: 1px solid var(--color-border);
+}
+
+/* ── 输入/输出两栏布局 ── */
+.io-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  height: calc(100vh - var(--topbar-height) - 100px);
+}
+
+.io-layout .io-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-card-bg);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.io-panel-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border);
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #fafafa;
+  flex-shrink: 0;
+}
+
+.io-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+/* ── 状态徽标 ── */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.status-dot.online { background: #52c41a; box-shadow: 0 0 0 2px rgba(82,196,26,.2); }
+.status-dot.offline { background: #ff4d4f; box-shadow: 0 0 0 2px rgba(255,77,79,.2); }
+.status-dot.checking { background: #faad14; animation: pulse 1.2s infinite; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ── 占位开发中 ── */
+.wip-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 24px;
+  color: var(--color-text-muted);
+}
+
+.wip-placeholder .el-icon { font-size: 48px; color: #d0d0d0; }
+
+/* ── Element Plus 覆盖 ── */
+.el-button--primary { --el-button-bg-color: var(--color-primary); }
+
+.el-tabs__nav-wrap::after { height: 1px; }
+
+.el-textarea .el-textarea__inner {
+  font-family: inherit;
+  resize: vertical;
+}
+
+/* ── markdown 输出区 ── */
+.md-output {
+  line-height: 1.8;
+  color: var(--color-text-primary);
+}
+.md-output h1, .md-output h2, .md-output h3 { margin: 16px 0 8px; font-weight: 600; }
+.md-output p { margin-bottom: 10px; }
+.md-output ul, .md-output ol { padding-left: 20px; margin-bottom: 10px; }
+.md-output li { margin-bottom: 4px; }
+.md-output code {
+  background: #f5f5f5;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 13px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+.md-output pre {
+  background: #1e1e2e;
+  color: #cdd6f4;
+  border-radius: 6px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  margin-bottom: 12px;
+}
+.md-output pre code { background: none; padding: 0; color: inherit; font-size: 13px; }
+.md-output blockquote {
+  border-left: 3px solid var(--color-primary);
+  padding: 8px 12px;
+  background: #f0f5ff;
+  border-radius: 0 4px 4px 0;
+  margin-bottom: 10px;
+  color: var(--color-text-secondary);
+}
+
+/* ── 响应式 ── */
+@media (max-width: 900px) {
+  .io-layout { grid-template-columns: 1fr; height: auto; }
+}

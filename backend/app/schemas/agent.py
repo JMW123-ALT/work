@@ -1,6 +1,13 @@
 """文创 Agent 请求模型。"""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, model_validator
+
+
+class AgentHistoryMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(..., min_length=1, max_length=4000)
 
 
 class AgentChatRequest(BaseModel):
@@ -8,6 +15,7 @@ class AgentChatRequest(BaseModel):
     user_type: str = Field(default="visitor")
     top_k: int = Field(default=5, ge=1, le=50)
     min_confidence: float = Field(default=0.7, ge=0, le=1)
+    history: list[AgentHistoryMessage] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
     def _strip_query(self) -> "AgentChatRequest":

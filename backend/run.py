@@ -1,9 +1,6 @@
 """
-应用启动入口（替代原 backend/app.py）
 用法：
   python run.py
-  或
-  uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 """
 import sys
 from pathlib import Path
