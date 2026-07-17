@@ -185,11 +185,102 @@
           </el-descriptions-item>
         </el-descriptions>
 
+        <!-- 原始文件查看 -->
+        <template v-if="detailDoc.modality && detailDoc.modality !== 'text'">
+          <el-divider />
+          <div class="detail-section-title">原始文件</div>
+
+          <!-- PDF 内嵌预览 -->
+          <template v-if="detailDoc.modality === 'pdf'">
+            <div class="pdf-viewer-wrap">
+              <iframe
+                :src="`/api/documents/${detailDoc.document_id}/file`"
+                class="pdf-viewer"
+                type="application/pdf"
+                title="PDF 预览"
+              />
+            </div>
+            <div class="file-actions">
+              <el-button size="small" plain :href="`/api/documents/${detailDoc.document_id}/file?download=true`" tag="a" target="_blank">
+                <el-icon><Download /></el-icon>下载 PDF
+              </el-button>
+            </div>
+          </template>
+
+          <!-- 图片内嵌 -->
+          <template v-else-if="detailDoc.modality === 'image'">
+            <img
+              :src="`/api/documents/${detailDoc.document_id}/file`"
+              class="img-viewer"
+              alt="图片预览"
+            />
+            <div class="file-actions">
+              <el-button size="small" plain :href="`/api/documents/${detailDoc.document_id}/file?download=true`" tag="a" target="_blank">
+                <el-icon><Download /></el-icon>下载图片
+              </el-button>
+            </div>
+          </template>
+
+          <!-- Office / PPT / Word / Excel — 无法浏览器内嵌，提供下载和在线查看 -->
+          <template v-else-if="detailDoc.modality === 'office'">
+            <div class="office-notice">
+              <el-icon><InfoFilled /></el-icon>
+              浏览器不支持直接预览 Office 文件，请下载后本地打开，或用微软 Office Online 查看
+            </div>
+            <div class="file-actions">
+              <el-button
+                size="small"
+                type="primary"
+                plain
+                :href="`/api/documents/${detailDoc.document_id}/file?download=true`"
+                tag="a"
+                target="_blank"
+              >
+                <el-icon><Download /></el-icon>下载文件
+              </el-button>
+            </div>
+          </template>
+        </template>
+
         <!-- 正文 -->
-        <div class="detail-section-title">正文内容</div>
-        <div class="detail-content">{{ detailDoc.content || '（无正文内容）' }}</div>
+        <el-divider v-if="detailDoc.content" />
+        <div class="detail-section-title">
+          正文内容
+          <span class="content-length" v-if="detailDoc.content">
+            （{{ detailDoc.content.length.toLocaleString() }} 字）
+          </span>
+        </div>
+        <div class="detail-content" :class="{ expanded: contentExpanded }">
+          {{ contentExpanded ? (detailDoc.content || '（无正文内容）') : contentPreview }}
+        </div>
+        <!-- 展开全文按钮（右下角） -->
+        <div v-if="detailDoc.content && detailDoc.content.length > 300" class="expand-bar">
+          <el-button
+            link
+            type="primary"
+            size="small"
+            @click="contentExpanded = !contentExpanded"
+          >
+            <el-icon><component :is="contentExpanded ? 'ArrowUp' : 'ArrowDown'" /></el-icon>
+            {{ contentExpanded ? '收起全文' : '展开全文' }}
+          </el-button>
+        </div>
       </template>
     </el-drawer>
+
+    <!-- 全文浮层（点击「展开全文」后弹出的独立对话框） -->
+    <el-dialog
+      v-model="fullTextVisible"
+      :title="detailDoc?.title + ' — 全文'"
+      width="70%"
+      top="5vh"
+      :close-on-click-modal="true"
+    >
+      <div class="fulltext-body">{{ detailDoc?.content || '' }}</div>
+      <template #footer>
+        <el-button @click="fullTextVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -207,6 +298,13 @@ const page = ref(1)
 const pageSize = 18
 const detailVisible = ref(false)
 const detailDoc = ref(null)
+const contentExpanded = ref(false)
+const fullTextVisible = ref(false)
+
+const contentPreview = computed(() => {
+  const text = detailDoc.value?.content || ''
+  return text.length > 300 ? text.slice(0, 300) + '…' : text || '（无正文内容）'
+})
 
 // 筛选逻辑
 const filtered = computed(() => {
@@ -245,6 +343,7 @@ async function load() {
 function openDetail(doc) {
   detailDoc.value = doc
   detailVisible.value = true
+  contentExpanded.value = false
 }
 
 // ── 工具函数 ──
@@ -450,13 +549,86 @@ onMounted(load)
   border: 1px solid var(--color-border);
   border-radius: 6px;
   padding: 12px 14px;
-  max-height: 400px;
+  max-height: 260px;
   overflow-y: auto;
+  transition: max-height 0.3s ease;
+}
+.detail-content.expanded {
+  max-height: 1200px;
+}
+
+.expand-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.content-length {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--color-text-muted);
+  margin-left: 4px;
+}
+
+.fulltext-body {
+  white-space: pre-wrap;
+  font-size: 14px;
+  line-height: 1.9;
+  color: var(--color-text-primary);
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 4px 2px;
 }
 
 .mono-text {
   font-family: 'SF Mono', 'Fira Code', monospace;
   font-size: 12px;
   color: var(--color-text-muted);
+}
+
+/* 原始文件查看 */
+.pdf-viewer-wrap {
+  width: 100%;
+  height: 600px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #525659;
+}
+
+.pdf-viewer {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.img-viewer {
+  width: 100%;
+  max-height: 500px;
+  object-fit: contain;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: #f5f5f5;
+  display: block;
+}
+
+.office-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  background: #fffbe6;
+  border: 1px solid #ffe58f;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+}
+
+.file-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
 }
 </style>

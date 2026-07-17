@@ -31,10 +31,17 @@ class Settings(BaseSettings):
     cors_allow_methods: list[str] = Field(default=["*"])
     cors_allow_headers: list[str] = Field(default=["*"])
 
-    # Platform infrastructure placeholders. The current v1 app keeps its
-    # working SQLite/Chroma path until the PostgreSQL milestone is implemented.
+    # PostgreSQL — v2 data layer
     database_url: str = ""
     database_url_sync: str = ""
+
+    # Default organization for single-org local mode.
+    # API layer injects this when no authenticated org context is present.
+    # Never hard-code this UUID in business logic; always read settings.
+    default_organization_id: str = "00000000-0000-4000-8000-00000000a001"
+
+    # Redis / Celery — present for future use; NOT required for local mode.
+    # The current runtime uses FastAPI BackgroundTasks instead of Celery.
     redis_url: str = "redis://localhost:6379/0"
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"

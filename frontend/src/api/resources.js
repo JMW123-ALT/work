@@ -1,7 +1,16 @@
-import { apiGet, apiPost, apiUpload } from './client.js'
+import { apiGet, apiPost, apiDelete, apiUpload } from './client.js'
 
-/** GET /api/documents */
+/** GET /api/documents  — v2 PostgreSQL list */
 export const listDocuments = () => apiGet('/api/documents')
+
+/** GET /api/documents/:id — single document status */
+export const getDocument = (id) => apiGet(`/api/documents/${id}`)
+
+/** DELETE /api/documents/:id */
+export const deleteDocument = (id) => apiDelete(`/api/documents/${id}`)
+
+/** POST /api/documents/:id/retry — re-index failed document */
+export const retryDocument = (id) => apiPost(`/api/documents/${id}/retry`, {})
 
 /** GET /api/v1/resource-categories */
 export const getCategories = () => apiGet('/api/v1/resource-categories')

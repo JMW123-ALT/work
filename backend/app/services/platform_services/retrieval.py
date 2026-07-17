@@ -171,7 +171,8 @@ class RetrievalService:
                     "with the current embedding model."
                 ) from exc
             raise
-        raw_items = await self._format_results(result)
+        user_type = str(payload.get("user_type", "visitor"))
+        raw_items = await self._format_results(result, user_type=user_type)
         reranked = self.rerank_items(query, raw_items, top_n=top_k)
         items = [
             item
@@ -185,9 +186,11 @@ class RetrievalService:
             "rerank": {"mode": reranked["mode"], "model": reranked["model"]},
         }
 
-    async def _format_results(self, result: dict) -> list[dict]:
+    async def _format_results(self, result: dict, user_type: str = "visitor") -> list[dict]:
+        from app.services.permissions import can_access
+
         ids = (result.get("ids") or [[]])[0] or []
-        documents = (result.get("documents") or [[]])[0] or []
+        documents_raw = (result.get("documents") or [[]])[0] or []
         metadatas = (result.get("metadatas") or [[]])[0] or []
         distances = (result.get("distances") or [[]])[0] or []
         records = await self._chunks_by_ids([str(item) for item in ids])
@@ -197,11 +200,20 @@ class RetrievalService:
             chunk_key = str(chunk_id)
             pair = records.get(chunk_key)
             if not pair:
+                # Orphaned Chroma vector — skip silently, log as index inconsistency
                 continue
             chunk, document = pair
-            metadata = dict(metadatas[index] or {}) if index < len(metadatas) else {}
+
+            # ── Permission check: authoritative source is PostgreSQL ──────
+            # Never use Chroma metadata as the final permission decision.
+            if document.status not in ("ready",):
+                # Non-ready documents (deleting, deleted, failed, etc.) are excluded
+                continue
+            if not can_access(user_type, document.permission_level):
+                continue
+
             score = _score_from_distance(distances[index] if index < len(distances) else None)
-            content = chunk.content or (documents[index] if index < len(documents) else "")
+            content = chunk.content or (documents_raw[index] if index < len(documents_raw) else "")
             items.append(
                 {
                     "chunk_id": chunk.id,
@@ -214,7 +226,8 @@ class RetrievalService:
                     "snippet": content[:180],
                     "title": document.title,
                     "object_type": document.object_type,
-                    "permission_level": metadata.get("permission_level", "public"),
+                    # permission_level from PostgreSQL — not from Chroma metadata
+                    "permission_level": document.permission_level,
                     "access_channel": document.access_channel,
                     "original_ref_uri": document.original_ref_uri,
                     "section_path": chunk.section_path,
@@ -224,12 +237,6 @@ class RetrievalService:
                     "asset_path": chunk.asset_path,
                     "asset_mime_type": chunk.asset_mime_type,
                     "embedding_modality": chunk.embedding_modality,
-                    "file_name": metadata.get("file_name", ""),
-                    "mime_type": metadata.get("mime_type", ""),
-                    "file_size": int(metadata.get("file_size") or 0),
-                    "chunk_count": int(metadata.get("chunk_count") or 0),
-                    "extraction_status": metadata.get("extraction_status", "parsed"),
-                    "runtime": int(metadata.get("runtime") or 0),
                     "created_at": str(chunk.created_at or ""),
                     "updated_at": str(chunk.updated_at or ""),
                     "score": round(score, 4),

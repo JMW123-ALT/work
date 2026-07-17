@@ -1,27 +1,72 @@
-"""Agent and streaming chat routes."""
+"""Agent and streaming chat routes — v2 retriever."""
 
 import asyncio
 import json
 from collections.abc import AsyncIterator
+from typing import Annotated
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Header
 from fastapi.responses import StreamingResponse
 
+from app.core.logging import logger
+from app.db.session import async_session_factory
 from app.schemas.agent import AgentChatRequest
-from app.services.agent import RAGServiceRetriever, run_agent
+from app.services.agent import Evidence, run_agent
 from app.services.llm_client import llm_client
-from app.services.rag_service import rag_service
+from app.services.permissions import normalize_user_type
+from app.services.rag_service import _to_agent_search_item
 
 router = APIRouter(tags=["Wenchuang Agent"])
 
 
-@router.post("/chat", summary="Wenchuang Agent chat")
-async def chat(req: AgentChatRequest):
-    """Keep the existing Wenchuang Agent workflow unchanged."""
-    retriever = RAGServiceRetriever(
-        user_type=req.user_type,
-        min_confidence=req.min_confidence,
-    )
+class V2Retriever:
+    """Adapts RetrievalService to the Agent's Retriever protocol.
+
+    Reads from PostgreSQL + Chroma v2; applies full permission and
+    status filters (only 'ready' documents with correct permission_level).
+    Agent receives plain Evidence objects — no direct PostgreSQL/Chroma access.
+    """
+
+    def __init__(self, user_type: str = "visitor", min_confidence: float = 0.0) -> None:
+        self.user_type = user_type
+        self.min_confidence = min_confidence
+
+    def search(self, query: str, n_results: int = 5) -> list[dict]:
+        if async_session_factory is None:
+            logger.warning("V2Retriever: DATABASE_URL not configured, returning empty evidence")
+            return []
+        import asyncio
+
+        async def _search():
+            from app.services.platform_services.retrieval import RetrievalService
+            async with async_session_factory() as session:
+                result = await RetrievalService(session).search(
+                    {
+                        "query": query,
+                        "user_type": self.user_type,
+                        "top_k": n_results,
+                        "min_confidence": 0.0,  # Agent filters itself
+                    }
+                )
+            return result.get("items", [])
+
+        try:
+            return asyncio.get_event_loop().run_until_complete(_search())
+        except RuntimeError:
+            # Running inside an existing event loop (e.g. uvicorn)
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(asyncio.run, _search())
+                return future.result(timeout=30)
+
+
+@router.post("/chat", summary="Wenchuang Agent chat (v2 knowledge base)")
+async def chat(
+    req: AgentChatRequest,
+    x_user_type: Annotated[str | None, Header(alias="X-User-Type")] = None,
+):
+    user_type = normalize_user_type(x_user_type or req.user_type or "visitor")
+    retriever = V2Retriever(user_type=user_type, min_confidence=req.min_confidence)
     return await run_agent(
         req.query,
         retriever=retriever,
@@ -30,14 +75,17 @@ async def chat(req: AgentChatRequest):
     )
 
 
-@router.post("/chat/stream", summary="Streaming knowledge-base Q&A")
-async def chat_stream(req: AgentChatRequest):
-    """Stream a ChatGPT-like answer for the new first tab."""
+@router.post("/chat/stream", summary="Streaming knowledge-base Q&A (v2 knowledge base)")
+async def chat_stream(
+    req: AgentChatRequest,
+    x_user_type: Annotated[str | None, Header(alias="X-User-Type")] = None,
+):
+    user_type = normalize_user_type(x_user_type or req.user_type or "visitor")
 
     async def event_stream() -> AsyncIterator[str]:
         yield _sse("start", {"status": "running"})
 
-        sources = _retrieve_sources(req)
+        sources = await _retrieve_sources_v2(req, user_type)
         messages = _build_stream_messages(req, sources)
         answer_parts: list[str] = []
 
@@ -67,19 +115,24 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {payload}\n\n"
 
 
-def _retrieve_sources(req: AgentChatRequest) -> list[dict]:
-    try:
-        result = rag_service.search(
-            {
-                "query": req.query,
-                "user_type": req.user_type,
-                "top_k": req.top_k,
-                "min_confidence": req.min_confidence,
-            }
-        )
-    except Exception:
+async def _retrieve_sources_v2(req: AgentChatRequest, user_type: str) -> list[dict]:
+    if async_session_factory is None:
         return []
-    return list(result.get("items") or [])
+    try:
+        from app.services.platform_services.retrieval import RetrievalService
+        async with async_session_factory() as session:
+            result = await RetrievalService(session).search(
+                {
+                    "query": req.query,
+                    "user_type": user_type,
+                    "top_k": req.top_k,
+                    "min_confidence": req.min_confidence,
+                }
+            )
+        return [_to_agent_search_item(item) for item in result.get("items", [])]
+    except Exception as exc:
+        logger.warning("_retrieve_sources_v2 failed: %s", exc)
+        return []
 
 
 def _build_stream_messages(req: AgentChatRequest, sources: list[dict]) -> list[dict[str, str]]:

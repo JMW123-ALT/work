@@ -83,7 +83,6 @@
                 </el-col>
               </el-row>
 
-              <!-- 拖拽上传区 -->
               <el-form-item label="选择文件">
                 <el-upload
                   drag
@@ -102,45 +101,23 @@
                 </el-upload>
               </el-form-item>
 
-              <!-- 已选文件列表（自定义，带类型识别标签） -->
               <div v-if="fileList.length" class="file-preview-list">
                 <div class="file-preview-header">
                   <span>已选 {{ fileList.length }} 个文件</span>
                   <el-button link size="small" type="danger" @click="fileList = []">全部清空</el-button>
                 </div>
-                <div
-                  v-for="(f, idx) in fileList"
-                  :key="idx"
-                  class="file-preview-item"
-                >
-                  <!-- 类型图标 -->
+                <div v-for="(f, idx) in fileList" :key="idx" class="file-preview-item">
                   <el-icon class="file-type-icon" :class="modalityClass(f.modality)">
                     <component :is="modalityIcon(f.modality)" />
                   </el-icon>
-
-                  <!-- 文件名 + 大小 -->
                   <div class="file-info">
                     <span class="file-name" :title="f.raw.name">{{ f.raw.name }}</span>
                     <span class="file-size">{{ formatSize(f.raw.size) }}</span>
                   </div>
-
-                  <!-- 自动识别的类型标签 -->
-                  <el-tag
-                    size="small"
-                    :type="modalityTagType(f.modality)"
-                    class="modality-tag"
-                  >
+                  <el-tag size="small" :type="modalityTagType(f.modality)" class="modality-tag">
                     {{ modalityLabel(f.modality) }}
                   </el-tag>
-
-                  <!-- 删除 -->
-                  <el-button
-                    link
-                    size="small"
-                    type="danger"
-                    @click="removeFile(idx)"
-                    class="file-remove"
-                  >
+                  <el-button link size="small" type="danger" @click="removeFile(idx)" class="file-remove">
                     <el-icon><Close /></el-icon>
                   </el-button>
                 </div>
@@ -166,12 +143,12 @@
       <!-- 右侧：状态 + 文档列表 -->
       <div class="ingest-right">
         <el-alert v-if="successItems.length" type="success" show-icon :closable="false" style="margin-bottom:16px">
-          <template #title>已入库 {{ successItems.length }} 条资料</template>
-          <div v-for="item in successItems" :key="item.source_id || item.title" class="success-item">
+          <template #title>已提交 {{ successItems.length }} 条资料（后台索引中）</template>
+          <div v-for="item in successItems" :key="item.document_id || item.title" class="success-item">
             <el-icon><Document /></el-icon>
             <span>{{ item.title }}</span>
             <el-tag size="small" :type="modalityTagType(item.modality)">{{ modalityLabel(item.modality) }}</el-tag>
-            <el-tag size="small" type="success">{{ item.extraction_status || 'parsed' }}</el-tag>
+            <el-tag size="small" :type="statusTagType(item.status)">{{ statusLabel(item.status) }}</el-tag>
           </div>
         </el-alert>
 
@@ -188,7 +165,7 @@
           </div>
           <div v-else-if="!docs.length" class="docs-empty">暂无资料，开始录入后将在此显示</div>
           <div v-else class="doc-items">
-            <div v-for="doc in docs" :key="doc.source_id || doc.title" class="doc-item">
+            <div v-for="doc in docs" :key="doc.document_id || doc.source_id" class="doc-item">
               <div class="doc-item-main">
                 <el-icon class="doc-icon" :class="modalityClass(doc.modality)">
                   <component :is="modalityIcon(doc.modality)" />
@@ -199,11 +176,34 @@
                   <el-tag size="small" :type="doc.permission_level === 'public' ? 'success' : 'warning'">
                     {{ doc.permission_level === 'public' ? '对外' : '对内' }}
                   </el-tag>
+                  <!-- v2 processing status -->
+                  <el-tag size="small" :type="statusTagType(doc.status)">{{ statusLabel(doc.status) }}</el-tag>
                 </div>
               </div>
+              <div v-if="doc.error_message" class="doc-error">
+                <el-icon><Warning /></el-icon> {{ doc.error_message }}
+              </div>
               <div class="doc-meta">
-                chunks: {{ doc.chunk_count || 0 }} · {{ doc.extraction_status || 'parsed' }}
+                <span v-if="doc.updated_at">{{ doc.updated_at?.slice(0,16) }}</span>
                 <span v-if="doc.file_size"> · {{ formatSize(doc.file_size) }}</span>
+              </div>
+              <!-- Actions: retry for failed, delete for any -->
+              <div class="doc-actions">
+                <el-button
+                  v-if="doc.status === 'failed' || doc.status === 'queued'"
+                  link size="small" type="primary"
+                  :loading="retrying[doc.document_id]"
+                  @click="retryDoc(doc)"
+                >
+                  <el-icon><RefreshRight /></el-icon>重试
+                </el-button>
+                <el-button
+                  link size="small" type="danger"
+                  :loading="deleting[doc.document_id]"
+                  @click="deleteDoc(doc)"
+                >
+                  <el-icon><Delete /></el-icon>删除
+                </el-button>
               </div>
             </div>
           </div>
@@ -215,7 +215,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { ingestText, ingestFile, listDocuments } from '@/api/resources.js'
+import { ingestText, ingestFile, listDocuments, retryDocument, deleteDocument } from '@/api/resources.js'
 import { useAppStore } from '@/stores/app.js'
 
 const appStore = useAppStore()
@@ -225,8 +225,10 @@ const successItems = ref([])
 const errorMsg = ref('')
 const docs = ref([])
 const docsLoading = ref(false)
-const fileList = ref([])   // [{ raw: File, modality: string }]
+const fileList = ref([])
 const textFormRef = ref(null)
+const retrying = ref({})
+const deleting = ref({})
 
 const textForm = ref({ title: '', content: '', objectType: 'other', permissionLevel: 'internal' })
 const fileForm = ref({ title: '', objectType: 'other', permissionLevel: 'internal' })
@@ -253,17 +255,12 @@ function detectModality(file) {
 }
 
 function onFileAdd(file) {
-  // el-upload on-change 回调，file.raw 是原始 File 对象
-  if (file.raw) {
-    fileList.value.push({ raw: file.raw, modality: detectModality(file.raw) })
-  }
+  if (file.raw) fileList.value.push({ raw: file.raw, modality: detectModality(file.raw) })
 }
 
-function removeFile(idx) {
-  fileList.value.splice(idx, 1)
-}
+function removeFile(idx) { fileList.value.splice(idx, 1) }
 
-// ── 类型显示工具 ──────────────────────────────────────────────────────
+// ── 类型显示 ──────────────────────────────────────────────────────────
 const MODALITY_LABEL = { pdf: 'PDF', office: 'Office', image: '图片', text: '文本' }
 const MODALITY_TAG   = { pdf: 'danger', office: 'warning', image: 'success', text: '' }
 const MODALITY_ICON  = { pdf: 'Document', office: 'Paperclip', image: 'Picture', text: 'EditPen' }
@@ -273,6 +270,19 @@ function modalityLabel(m) { return MODALITY_LABEL[m] || m || 'text' }
 function modalityTagType(m) { return MODALITY_TAG[m] ?? '' }
 function modalityIcon(m)  { return MODALITY_ICON[m] || 'EditPen' }
 function modalityClass(m) { return MODALITY_CLASS[m] || 'icon-text' }
+
+// ── 处理状态显示 ──────────────────────────────────────────────────────
+const STATUS_LABEL = {
+  queued: '排队中', parsing: '解析中', embedding: '向量化',
+  ready: '可检索', failed: '失败', deleting: '删除中', deleted: '已删除',
+}
+const STATUS_TAG = {
+  queued: 'info', parsing: 'warning', embedding: 'warning',
+  ready: 'success', failed: 'danger', deleting: 'info', deleted: 'info',
+}
+
+function statusLabel(s) { return STATUS_LABEL[s] || s || '-' }
+function statusTagType(s) { return STATUS_TAG[s] ?? '' }
 
 function formatSize(bytes) {
   if (!bytes) return ''
@@ -313,7 +323,7 @@ async function submitText() {
   finally { loading.value = false }
 }
 
-// ── 提交文件（按文件逐个传递识别到的 modality）────────────────────────
+// ── 提交文件 ──────────────────────────────────────────────────────────
 async function submitFile() {
   if (!fileList.value.length) return
   loading.value = true
@@ -326,8 +336,6 @@ async function submitFile() {
     form.append('permission_level', fileForm.value.permissionLevel)
     form.append('ingest_role', appStore.currentUserType === 'visitor' ? 'none' : 'admin')
     form.append('operator', 'local-admin')
-    // 多文件统一 modality 时取第一个；后端也可 per-file 识别
-    // 这里不传 modality，让后端从 mime_type 自动识别（最准）
     fileList.value.forEach(f => form.append('files', f.raw))
     const data = await ingestFile(form)
     successItems.value = data.items || (data.item ? [data.item] : [])
@@ -335,6 +343,29 @@ async function submitFile() {
     await loadDocs()
   } catch (e) { errorMsg.value = e.message }
   finally { loading.value = false }
+}
+
+// ── 重试 ──────────────────────────────────────────────────────────────
+async function retryDoc(doc) {
+  const id = doc.document_id || doc.source_id
+  retrying.value[id] = true
+  try {
+    await retryDocument(id)
+    await loadDocs()
+  } catch (e) { errorMsg.value = e.message }
+  finally { retrying.value[id] = false }
+}
+
+// ── 删除 ──────────────────────────────────────────────────────────────
+async function deleteDoc(doc) {
+  const id = doc.document_id || doc.source_id
+  if (!confirm(`确认删除「${doc.title}」？删除后无法恢复。`)) return
+  deleting.value[id] = true
+  try {
+    await deleteDocument(id)
+    await loadDocs()
+  } catch (e) { errorMsg.value = e.message }
+  finally { deleting.value[id] = false }
 }
 
 onMounted(loadDocs)
@@ -351,21 +382,18 @@ onMounted(loadDocs)
 .ingest-form-card { padding: 20px 24px; }
 .form-footer { margin-top: 12px; }
 
-/* 上传区 */
 .file-upload-area { width: 100%; }
 .upload-icon { font-size: 40px; color: #c0c4cc; margin-bottom: 8px; }
 .upload-text { font-size: 14px; color: var(--color-text-secondary); }
 .upload-text em { color: var(--color-primary); font-style: normal; }
 .upload-hint { font-size: 12px; color: var(--color-text-muted); margin-top: 4px; }
 
-/* 已选文件列表 */
 .file-preview-list {
   border: 1px solid var(--color-border);
   border-radius: 8px;
   overflow: hidden;
   margin-bottom: 4px;
 }
-
 .file-preview-header {
   display: flex;
   justify-content: space-between;
@@ -376,7 +404,6 @@ onMounted(loadDocs)
   font-size: 13px;
   color: var(--color-text-secondary);
 }
-
 .file-preview-item {
   display: flex;
   align-items: center;
@@ -394,55 +421,35 @@ onMounted(loadDocs)
 .icon-image  { color: #52c41a; }
 .icon-text   { color: var(--color-primary); }
 
-.file-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
+.file-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .file-name {
-  font-size: 13px;
-  color: var(--color-text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 13px; color: var(--color-text-primary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .file-size { font-size: 11px; color: var(--color-text-muted); }
-
 .modality-tag { flex-shrink: 0; }
 .file-remove { flex-shrink: 0; opacity: 0; transition: opacity var(--transition-base); }
 .file-preview-item:hover .file-remove { opacity: 1; }
 
-/* 右侧区域 */
 .ingest-right { display: flex; flex-direction: column; gap: 12px; }
 
 .success-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  padding: 3px 0;
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; padding: 3px 0;
 }
 .success-item span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .doc-list-card { padding: 16px 20px; }
 .doc-list-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  display: flex; justify-content: space-between; align-items: center;
   margin-bottom: 12px;
 }
 .doc-list-title { font-weight: 500; font-size: 14px; }
 
 .docs-loading, .docs-empty {
-  text-align: center;
-  padding: 24px;
-  color: var(--color-text-muted);
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
+  text-align: center; padding: 24px;
+  color: var(--color-text-muted); font-size: 13px;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
 }
 
 .doc-items { display: flex; flex-direction: column; gap: 10px; max-height: 500px; overflow-y: auto; }
@@ -454,23 +461,25 @@ onMounted(loadDocs)
   background: #fafafa;
 }
 .doc-item-main {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
+  display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
 }
 .doc-icon { font-size: 15px; flex-shrink: 0; }
 .doc-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--color-text-primary);
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 13px; font-weight: 500; color: var(--color-text-primary);
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.doc-tags { display: flex; gap: 4px; flex-shrink: 0; }
+.doc-tags { display: flex; gap: 4px; flex-shrink: 0; flex-wrap: wrap; }
+
+.doc-error {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 11px; color: #f56c6c; padding: 2px 0 2px 23px;
+}
+
 .doc-meta { font-size: 11px; color: var(--color-text-muted); padding-left: 23px; }
+
+.doc-actions {
+  display: flex; gap: 8px; padding-top: 4px; padding-left: 20px;
+}
 
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

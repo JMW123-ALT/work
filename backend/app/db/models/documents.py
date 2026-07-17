@@ -1,9 +1,24 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, JSON, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, IdMixin, TimestampMixin
+
+
+# All recognised permission levels (must match permissions.py PERMISSION_ORDER)
+PERMISSION_LEVELS = ("public", "free", "paid", "internal", "restricted")
+
+# Full document lifecycle statuses
+DOCUMENT_STATUSES = (
+    "queued",     # upload accepted, indexing not yet started
+    "parsing",    # text extraction / OCR in progress
+    "embedding",  # chunk embedding + Chroma write in progress
+    "ready",      # fully indexed, available for retrieval
+    "failed",     # terminal failure; can be retried explicitly
+    "deleting",   # delete triggered, removed from retrieval immediately
+    "deleted",    # cleanup complete
+)
 
 
 class Document(IdMixin, TimestampMixin, Base):
@@ -27,7 +42,20 @@ class Document(IdMixin, TimestampMixin, Base):
     modality: Mapped[str] = mapped_column(String(40), nullable=False, default="text")
     file_sha256: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     content_sha256: Mapped[str] = mapped_column(String(64), nullable=False, default="")
-    status: Mapped[str] = mapped_column(String(30), nullable=False, default="active")
+
+    # Permission level — must persist to PostgreSQL as the authoritative source.
+    # Default 'internal' is conservative: newly uploaded docs are not public
+    # unless explicitly set. Never silently default to 'public' on missing data.
+    permission_level: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="internal", index=True
+    )
+
+    # Processing status lifecycle (see DOCUMENT_STATUSES above).
+    # New uploads start as 'queued'. Only 'ready' documents are retrievable.
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="queued", index=True)
+
+    # Human-readable summary of the last error (set when status == 'failed').
+    error_message: Mapped[str] = mapped_column(String(2000), nullable=False, default="")
 
     __table_args__ = (
         UniqueConstraint("organization_id", "source_id", name="uq_documents_org_source"),
@@ -38,6 +66,15 @@ class Document(IdMixin, TimestampMixin, Base):
             "file_sha256",
             unique=True,
             postgresql_where=file_sha256 != "",
+        ),
+        # Short names — naming convention will expand to ck_documents_<name>
+        CheckConstraint(
+            "permission_level IN ('public','free','paid','internal','restricted')",
+            name="permission_level",
+        ),
+        CheckConstraint(
+            "status IN ('queued','parsing','embedding','ready','failed','deleting','deleted')",
+            name="status",
         ),
     )
 

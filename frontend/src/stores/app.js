@@ -5,7 +5,7 @@ import { checkHealth } from '@/api/chat.js'
 export const useAppStore = defineStore('app', () => {
   const sidebarCollapsed = ref(false)
   const backendHealthy = ref(null) // null=checking, true=ok, false=offline
-  const currentUserType = ref('visitor')
+  const currentUserType = ref('internal')
 
   let healthTimer = null
 

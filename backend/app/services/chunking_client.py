@@ -58,11 +58,11 @@ class ChunkingClient:
         return {"modality": modality, "content": content, "extraction_status": status}
 
     # ── LangChain 切分参数 ────────────────────────────────────────
-    # chunk_size：每块目标字符数。中文 500 字 ≈ 333 tokens，
+    # chunk_size：每块目标字符数。中文 900 字 ≈ 333 tokens，
     #   加上标题前缀后仍远低于 DashScope text-embedding-v3 的 8192 token 上限。
     # chunk_overlap：相邻块重叠字符数，保留跨块上下文。
-    CHUNK_SIZE = 500
-    CHUNK_OVERLAP = 80
+    CHUNK_SIZE = 900
+    CHUNK_OVERLAP = 120
 
     # RecursiveCharacterTextSplitter 按优先级逐级尝试以下分隔符：
     #   双换行（段落）→ 单换行 → 中文句末标点 → 英文句末标点 → 空格 → 单字符

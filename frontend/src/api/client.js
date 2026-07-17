@@ -26,6 +26,14 @@ export async function apiPost(path, body) {
   return data
 }
 
+export async function apiDelete(path) {
+  const res = await fetch(BASE + path, { method: 'DELETE' })
+  if (res.status === 204) return {}
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.message || data.detail || `DELETE ${path} → ${res.status}`)
+  return data
+}
+
 export async function apiUpload(path, formData) {
   const res = await fetch(BASE + path, { method: 'POST', body: formData })
   const data = await res.json().catch(() => ({}))
