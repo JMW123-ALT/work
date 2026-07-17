@@ -1,0 +1,4 @@
+"""IP 设计类 Agent prompt 占位。"""
+
+CULTURAL_IP_SYSTEM_PROMPT = ""
+PRODUCT_DESIGN_SYSTEM_PROMPT = ""
