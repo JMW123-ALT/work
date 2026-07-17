@@ -1,0 +1,6 @@
+"""传播类 Agent prompt 占位。未来在此维护各平台的 prompt 模板。"""
+
+XIAOHONGSHU_SYSTEM_PROMPT = ""
+DOUYIN_SYSTEM_PROMPT = ""
+WECHAT_ARTICLE_SYSTEM_PROMPT = ""
+VIDEO_SCRIPT_SYSTEM_PROMPT = ""

@@ -79,11 +79,15 @@ def create_app() -> FastAPI:
     app.include_router(api_router, prefix="/api", include_in_schema=False)
 
     # ── 静态前端文件 ────────────────────────────────────────────────────────
-    frontend_dir = settings.data_dir.parents[1] / "frontend"
-    if frontend_dir.exists():
+    # 只挂载构建产物（dist/），不挂载源码目录（frontend/）。
+    # 挂载 StaticFiles("/",...) 会拦截所有 POST 请求并返回 405，
+    # 因为 StaticFiles 只支持 GET/HEAD。
+    # 开发时通过 Vite dev server（port 5173）访问前端，无需此挂载。
+    dist_dir = settings.data_dir.parents[1] / "dist"
+    if dist_dir.exists():
         app.mount(
             "/",
-            StaticFiles(directory=str(frontend_dir), html=True),
+            StaticFiles(directory=str(dist_dir), html=True),
             name="frontend",
         )
 

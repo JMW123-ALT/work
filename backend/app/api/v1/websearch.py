@@ -19,6 +19,7 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
+from app.common.sse import sse_event
 from app.services.llm_client import llm_client
 
 router = APIRouter(tags=["联网搜索"])
@@ -113,7 +114,7 @@ async def web_search_stream(q: str = ""):
     query = q.strip()
     if not query:
         async def empty():
-            yield _sse("done", {"status": "empty"})
+            yield sse_event("done", {"status": "empty"})
         return StreamingResponse(empty(), media_type="text/event-stream")
 
     async def event_stream() -> AsyncIterator[str]:
@@ -125,7 +126,7 @@ async def web_search_stream(q: str = ""):
         )
 
         # Push source cards first
-        yield _sse("sources", {"items": web_results})
+        yield sse_event("sources", {"items": web_results})
 
         # Build context and stream LLM answer
         context = _build_web_context(instant, web_results)
@@ -146,13 +147,9 @@ async def web_search_stream(q: str = ""):
         ]
 
         for chunk in llm_client.stream_chat(messages, temperature=0.3, max_tokens=1200):
-            yield _sse("delta", {"content": chunk})
+            yield sse_event("delta", {"content": chunk})
             await asyncio.sleep(0)
 
-        yield _sse("done", {"status": "done"})
+        yield sse_event("done", {"status": "done"})
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
-
-
-def _sse(event: str, data: dict) -> str:
-    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
