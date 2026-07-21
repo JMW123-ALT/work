@@ -99,6 +99,7 @@ export async function streamPost(path, body, handlers) {
         if (eventType === 'delta') handlers.onDelta(payload.content || '')
         if (eventType === 'final') handlers.onFinal?.(payload)
         if (eventType === 'done') handlers.onDone?.()
+        if (eventType === 'error') handlers.onError?.(new Error(payload.message || '流式生成失败'))
       }
     }
   } catch (e) {

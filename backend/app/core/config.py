@@ -91,6 +91,15 @@ class Settings(BaseSettings):
     upload_dir: Path = Field(default_factory=lambda: PROJECT_ROOT / "backend" / "data" / "uploads")
     asset_dir: Path = Field(default_factory=lambda: PROJECT_ROOT / "backend" / "data" / "assets")
 
+    # 图片生成 API（8848，OpenAI-compatible）
+    image_api_base_url: str = "https://api.884819.xyz/v1"
+    image_api_key: str = ""
+    image_api_timeout: int = 180
+    image_api_default_model: str = "gpt-image-2"
+    image_api_models: str = (
+        "gemini-3.1-flash-image,gpt-image-2,grok-imagine-image,grok-imagine-image-quality"
+    )
+
     # 日志配置
     log_level: str = "INFO"
     log_format: Literal["json", "text"] = "text"

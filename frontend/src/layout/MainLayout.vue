@@ -4,9 +4,11 @@
     <div class="app-main">
       <Topbar />
       <main class="app-content">
-        <router-view v-slot="{ Component }">
+        <router-view v-slot="{ Component, route }">
           <transition name="fade-slide" mode="out-in">
-            <component :is="Component" />
+            <keep-alive :include="['ImagePlanPage', 'XiaohongshuPage']">
+              <component :is="Component" :key="route.name || route.path" />
+            </keep-alive>
           </transition>
         </router-view>
       </main>

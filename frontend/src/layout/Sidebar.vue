@@ -128,7 +128,7 @@ function toggle() {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 20px;
+  padding: 0 56px 0 20px;
   border-bottom: 1px solid rgba(255,255,255,0.06);
   overflow: hidden;
   flex-shrink: 0;
@@ -151,27 +151,42 @@ function toggle() {
   width: 0;
 }
 
+.sidebar.collapsed .logo-icon {
+  opacity: 0;
+}
+
 /* 折叠按钮 */
 .sidebar-toggle {
   position: absolute;
-  right: -12px;
-  top: 50%;
+  right: 12px;
+  top: calc(var(--topbar-height) / 2);
   transform: translateY(-50%);
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: #fff;
-  color: var(--color-sidebar-bg);
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.9);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   z-index: 10;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-  transition: background var(--transition-base);
+  transition: background var(--transition-base), border-color var(--transition-base);
 }
 
-.sidebar-toggle:hover { background: #e8e8e8; }
+.sidebar.collapsed .sidebar-toggle {
+  right: 15px;
+}
+
+.sidebar-toggle:hover {
+  background: rgba(255,255,255,0.16);
+  border-color: rgba(255,255,255,0.24);
+}
+
+.sidebar-toggle .el-icon {
+  font-size: 18px;
+}
 
 /* 滚动区域 */
 .sidebar-scroll {

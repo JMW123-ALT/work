@@ -21,6 +21,7 @@ from fastapi.responses import StreamingResponse
 
 from app.common.sse import sse_event
 from app.services.llm_client import llm_client
+from app.services.web_search_client import ddg_web_results as _ddg_web_results
 
 router = APIRouter(tags=["联网搜索"])
 
@@ -38,51 +39,6 @@ def _ddg_instant(query: str) -> dict:
             return json.loads(resp.read().decode("utf-8"))
     except Exception:
         return {}
-
-
-def _ddg_web_results(query: str, max_results: int = 6) -> list[dict]:
-    """
-    从 DuckDuckGo HTML 搜索结果页提取标题 + URL + 摘要。
-    无需 API key，轻量 fallback。
-    """
-    url = (
-        "https://html.duckduckgo.com/html/?q="
-        + urllib.parse.quote_plus(query)
-        + "&kl=cn-zh"
-    )
-    try:
-        req = urllib.request.Request(url, headers={
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
-            )
-        })
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            html = resp.read().decode("utf-8", errors="replace")
-    except Exception:
-        return []
-
-    results = []
-    # Extract result blocks
-    blocks = re.findall(
-        r'class="result__title".*?<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>.*?'
-        r'class="result__snippet"[^>]*>(.*?)</span>',
-        html,
-        re.DOTALL,
-    )
-    for href, title_html, snippet_html in blocks[:max_results]:
-        title = re.sub(r"<[^>]+>", "", title_html).strip()
-        snippet = re.sub(r"<[^>]+>", "", snippet_html).strip()
-        # DDG redirects — extract real URL
-        real_url = href
-        if "duckduckgo.com/l/" in href or href.startswith("//"):
-            m = re.search(r"uddg=([^&]+)", href)
-            if m:
-                real_url = urllib.parse.unquote(m.group(1))
-        if title and snippet:
-            results.append({"title": title, "url": real_url, "snippet": snippet})
-
-    return results
 
 
 def _build_web_context(instant: dict, web_results: list[dict]) -> str:

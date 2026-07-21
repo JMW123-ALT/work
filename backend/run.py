@@ -1,15 +1,32 @@
-"""
-用法：
+"""Backend startup entry.
+
+Usage:
   python run.py
 """
+
+from __future__ import annotations
+
+import os
 import sys
 from pathlib import Path
 
-# 确保 backend/ 在 sys.path 首位，让 `from app.xxx` 正确解析
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+BACKEND_DIR = Path(__file__).resolve().parent
+VENV_PYTHON = BACKEND_DIR / ".venv" / "Scripts" / "python.exe"
+
+if VENV_PYTHON.exists() and Path(sys.executable).resolve() != VENV_PYTHON.resolve():
+    os.execv(
+        str(VENV_PYTHON),
+        [str(VENV_PYTHON), str(Path(__file__).resolve()), *sys.argv[1:]],
+    )
+
+# Ensure backend/ is first on sys.path so `from app.xxx` resolves correctly.
+sys.path.insert(0, str(BACKEND_DIR))
 
 import uvicorn
+
 from app.core.config import settings
+
 
 if __name__ == "__main__":
     uvicorn.run(
