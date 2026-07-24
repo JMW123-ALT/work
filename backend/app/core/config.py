@@ -100,6 +100,11 @@ class Settings(BaseSettings):
         "gemini-3.1-flash-image,gpt-image-2,grok-imagine-image,grok-imagine-image-quality"
     )
 
+    # Pexels 图片搜索 API（用于文章配图检索）
+    pexels_api_key: str = ""
+    pexels_base_url: str = "https://api.pexels.com/v1"
+    pexels_timeout: int = 15
+
     # 日志配置
     log_level: str = "INFO"
     log_format: Literal["json", "text"] = "text"

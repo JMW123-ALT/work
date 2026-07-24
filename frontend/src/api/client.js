@@ -54,13 +54,28 @@ export async function apiUpload(path, formData) {
  * }} handlers
  */
 export async function streamPost(path, body, handlers) {
+  return streamRequest(
+    path,
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+    handlers,
+  )
+}
+
+/**
+ * streamPostForm — SSE 流式接口（multipart/form-data，支持文件上传）
+ * @param {string} path
+ * @param {FormData} formData
+ * @param {object} handlers  与 streamPost 相同，另支持 onImage(payload)
+ */
+export async function streamPostForm(path, formData, handlers) {
+  return streamRequest(path, { method: 'POST', body: formData }, handlers)
+}
+
+// 共享的 SSE 读取逻辑：解析 event/data 块并分发到 handlers
+async function streamRequest(path, init, handlers) {
   let res
   try {
-    res = await fetch(BASE + path, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
+    res = await fetch(BASE + path, init)
   } catch (e) {
     handlers.onError?.(new Error('无法连接到服务器，请检查后端是否启动'))
     return
@@ -95,8 +110,9 @@ export async function streamPost(path, body, handlers) {
         if (!dataStr) continue
         let payload
         try { payload = JSON.parse(dataStr) } catch { continue }
-        if (eventType === 'start') handlers.onStart?.()
-        if (eventType === 'delta') handlers.onDelta(payload.content || '')
+        if (eventType === 'start') handlers.onStart?.(payload)
+        if (eventType === 'delta') handlers.onDelta?.(payload.content || '')
+        if (eventType === 'image') handlers.onImage?.(payload)
         if (eventType === 'final') handlers.onFinal?.(payload)
         if (eventType === 'done') handlers.onDone?.()
         if (eventType === 'error') handlers.onError?.(new Error(payload.message || '流式生成失败'))

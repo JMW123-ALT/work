@@ -1,6 +1,14 @@
-// 文创IP 相关接口，核心接口使用 /api/chat（见 chat.js）
-// 衍生品设计占位
+/**
+ * 文创 IP 设计接口封装
+ */
+import { apiPost, streamPost } from './client.js'
 
-// export function generateProduct(params) { ... }
+// 对话式 IP 形象设计（SSE 流式）
+export function ipDesignChatStream(history, handlers) {
+  return streamPost('/api/v1/ip/design/chat/stream', { history }, handlers)
+}
 
-export const ip = {}
+// 出图：中文 prompt → 英文 → 文生图(text) / 图生图(edit)
+export function ipDesignGenerateImage(payload) {
+  return apiPost('/api/v1/ip/design/image', payload)
+}

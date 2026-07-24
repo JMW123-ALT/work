@@ -6,7 +6,7 @@
       <main class="app-content">
         <router-view v-slot="{ Component, route }">
           <transition name="fade-slide" mode="out-in">
-            <keep-alive :include="['ImagePlanPage', 'XiaohongshuPage']">
+            <keep-alive>
               <component :is="Component" :key="route.name || route.path" />
             </keep-alive>
           </transition>

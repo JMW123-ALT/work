@@ -18,9 +18,9 @@
         router
         :collapse="collapsed"
         :collapse-transition="false"
-        background-color="#001529"
-        text-color="rgba(255,255,255,0.72)"
-        active-text-color="#ffffff"
+        background-color="transparent"
+        text-color="#40414f"
+        active-text-color="#0d0d0d"
         class="sidebar-menu"
       >
         <!-- AI 问答（一级直接路由） -->
@@ -115,7 +115,7 @@ function toggle() {
   transition: width var(--transition-base);
   position: relative;
   z-index: 100;
-  box-shadow: 2px 0 8px rgba(0,0,0,0.15);
+  border-right: 1px solid var(--color-sidebar-border);
 }
 
 .sidebar.collapsed {
@@ -129,7 +129,7 @@ function toggle() {
   align-items: center;
   gap: 10px;
   padding: 0 56px 0 20px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid var(--color-sidebar-border);
   overflow: hidden;
   flex-shrink: 0;
   white-space: nowrap;
@@ -140,7 +140,7 @@ function toggle() {
 .logo-text {
   font-size: 15px;
   font-weight: 700;
-  color: #ffffff;
+  color: #3a2828;
   letter-spacing: 0.5px;
   white-space: nowrap;
   transition: opacity var(--transition-base);
@@ -163,10 +163,10 @@ function toggle() {
   transform: translateY(-50%);
   width: 34px;
   height: 34px;
-  border: 1px solid rgba(255,255,255,0.12);
+  border: 1px solid var(--color-sidebar-border);
   border-radius: 8px;
-  background: rgba(255,255,255,0.08);
-  color: rgba(255,255,255,0.9);
+  background: #ffffff;
+  color: #40414f;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -180,8 +180,8 @@ function toggle() {
 }
 
 .sidebar-toggle:hover {
-  background: rgba(255,255,255,0.16);
-  border-color: rgba(255,255,255,0.24);
+  background: #ececec;
+  border-color: #d5d5d5;
 }
 
 .sidebar-toggle .el-icon {
@@ -196,32 +196,48 @@ function toggle() {
 /* 菜单覆盖 */
 .sidebar-menu {
   border: none !important;
+  padding: 8px;
   --el-menu-bg-color: transparent;
-  --el-menu-hover-bg-color: rgba(255,255,255,0.08);
-  --el-menu-active-bg-color: var(--color-primary);
+  --el-menu-hover-bg-color: #ececec;
+  --el-menu-active-bg-color: var(--color-sidebar-active);
   --el-menu-item-height: 42px;
   --el-menu-sub-item-height: 38px;
 }
 
+/* 一级菜单项 / 子菜单标题：圆角 pill 风格 */
+:deep(.el-menu-item),
+:deep(.el-sub-menu__title) {
+  border-radius: 8px;
+  margin: 2px 0;
+}
+
 :deep(.el-menu-item.is-active) {
-  background-color: var(--color-primary) !important;
-  border-radius: 0 4px 4px 0;
+  background-color: var(--color-sidebar-active) !important;
+  border-radius: 8px;
+  font-weight: 600;
 }
 
 :deep(.el-sub-menu__title:hover),
 :deep(.el-menu-item:hover) {
-  background: rgba(255,255,255,0.08) !important;
+  background: #ececec !important;
 }
 
 :deep(.el-sub-menu__title) {
-  color: rgba(255,255,255,0.72) !important;
+  color: #40414f !important;
 }
 
 :deep(.el-sub-menu.is-opened > .el-sub-menu__title) {
-  color: #ffffff !important;
+  color: #0d0d0d !important;
 }
 
+/* 展开的子菜单：略深于侧栏底色，区分层级 */
 :deep(.el-menu--inline) {
-  background: rgba(0,0,0,0.2) !important;
+  background: #f0f0f0 !important;
+  border-radius: 8px;
+  margin: 2px 0;
+}
+
+:deep(.el-menu--inline .el-menu-item) {
+  border-radius: 6px;
 }
 </style>
